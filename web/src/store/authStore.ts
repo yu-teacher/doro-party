@@ -16,6 +16,8 @@ interface AuthState {
   /** 서버에 현재 로그인 상태를 물어 반영한다. 앱 시작 때 한 번 호출한다. */
   loadSession: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** 서버가 401 을 돌려줬다: 세션이 끝난 것이므로 화면 상태를 비로그인으로 맞춘다. */
+  markSignedOut: () => void;
 }
 
 interface SessionResponse {
@@ -57,4 +59,6 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     set(SIGNED_OUT);
   },
+
+  markSignedOut: () => set(SIGNED_OUT),
 }));

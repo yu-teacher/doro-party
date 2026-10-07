@@ -11,6 +11,43 @@ declare namespace kakao.maps {
     getLng(): number;
   }
 
+  class LatLngBounds {
+    constructor();
+    extend(latlng: LatLng): void;
+  }
+
+  class Size {
+    constructor(width: number, height: number);
+  }
+
+  class Point {
+    constructor(x: number, y: number);
+  }
+
+  interface MarkerImageOptions {
+    offset?: Point;
+  }
+
+  class MarkerImage {
+    constructor(src: string, size: Size, options?: MarkerImageOptions);
+  }
+
+  interface MarkerOptions {
+    position: LatLng;
+    image?: MarkerImage;
+    map?: Map | null;
+    title?: string;
+    zIndex?: number;
+  }
+
+  class Marker {
+    constructor(options: MarkerOptions);
+    setMap(map: Map | null): void;
+    setPosition(position: LatLng): void;
+    setImage(image: MarkerImage): void;
+    setZIndex(zIndex: number): void;
+  }
+
   interface MapOptions {
     center: LatLng;
     level?: number;
@@ -19,8 +56,21 @@ declare namespace kakao.maps {
   class Map {
     constructor(container: HTMLElement, options: MapOptions);
     setCenter(latlng: LatLng): void;
+    panTo(latlng: LatLng): void;
     getCenter(): LatLng;
     setLevel(level: number): void;
+    getLevel(): number;
+    setBounds(bounds: LatLngBounds): void;
     relayout(): void;
+  }
+
+  interface MouseEvent {
+    latLng: LatLng;
+  }
+
+  namespace event {
+    function addListener(target: Map, type: 'click', handler: (event: MouseEvent) => void): void;
+    function addListener(target: Marker, type: 'click', handler: () => void): void;
+    function removeListener(target: Map, type: 'click', handler: (event: MouseEvent) => void): void;
   }
 }
