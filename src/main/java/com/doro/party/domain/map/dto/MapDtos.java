@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public final class MapDtos {
@@ -39,13 +40,15 @@ public final class MapDtos {
             String ownerColor,
             boolean mine,
             MapRole role,
+            /** 이 지도를 내가 볼 수 있게 해 준 모임들의 이름(내가 만든 지도나 직접 공유받은 지도면 비어 있다) */
+            List<String> viaGroups,
             long pinCount,
             Instant createdAt,
             Instant updatedAt
     ) {
-        public static MapResponse from(PartyMap map, MapRole role, PartyUser owner, long pinCount) {
+        public static MapResponse from(PartyMap map, MapRole role, PartyUser owner, List<String> viaGroups, long pinCount) {
             return new MapResponse(map.getId(), map.getName(), map.getDescription(), map.getOwnerId(),
-                    owner.getNickname(), owner.getColor(), role == MapRole.OWNER, role, pinCount, map.getCreatedAt(), map.getUpdatedAt());
+                    owner.getNickname(), owner.getColor(), role == MapRole.OWNER, role, viaGroups, pinCount, map.getCreatedAt(), map.getUpdatedAt());
         }
     }
 }

@@ -107,18 +107,18 @@ public class PartySchemaInitializer implements ApplicationRunner {
                 partyDsl = new String(is.readAllBytes(), StandardCharsets.UTF_8);
             }
 
-            // Guard 스키마 등록은 전체 교체다. 활성 스키마는 그대로 두고, Guard 에 없는 블로그 타입만 뒤에 덧붙인다.
-            // (예전에는 party_map 가 있으면 끝냈기 때문에 나중에 추가한 타입이 운영에 등록되지 않았다.)
+            // Guard 스키마 등록은 전체 교체다. 다른 서비스의 타입은 그대로 두고, 도로 파티 타입만 없으면 덧붙이고 달라졌으면 교체한다.
             PartySchemaMerger.Result merge = PartySchemaMerger.merge(activeDsl, partyDsl);
-            if (!merge.differingTypes().isEmpty()) {
-                log.warn("Guard already has party types whose content differs from party-schema.doro: {}. "
-                        + "They are NOT changed automatically; review them in Guard.", merge.differingTypes());
+            if (!merge.replacedTypes().isEmpty()) {
+                log.info("Updating changed party types in DORO Guard: {}", merge.replacedTypes());
             }
             if (!merge.changed()) {
                 log.info("DORO Guard already contains every party schema type. Sync complete.");
                 return true;
             }
-            log.info("Registering missing party schema types in DORO Guard: {}", merge.addedTypes());
+            if (!merge.addedTypes().isEmpty()) {
+                log.info("Registering missing party schema types in DORO Guard: {}", merge.addedTypes());
+            }
             String combinedDsl = merge.mergedDsl();
 
             HttpHeaders headers = guardHeaders();

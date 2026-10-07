@@ -25,7 +25,7 @@
 | 핀 | 이름·메모(필수), 태그, 사진, 평점, 상태(WISH/VISITED) |
 | 개인 기록 | 방문 기록 타임라인, 사적/공유 메모 분리, 재방문 의사 |
 | 지도 단위 | 사람당 여러 지도, 공유는 지도 단위 |
-| 관계 | 친구 목록(상호 승인) + 즉석 모임/영구 그룹 |
+| 관계 | 친구(초대 링크로 바로, 사용자명 요청은 상대 승인) + 모임(카톡방처럼 링크·친구 초대로 들어오는 영구 그룹, 방장/멤버) |
 | 겹쳐보기 | 레이어 토글(기본) + 모임 전용 뷰, 작성자 항상 표시, 가까운 핀은 거리 기준 클러스터링 |
 | 추천 | 규칙 기반 점수 + 히트맵 |
 | 인증/인가 | Doro OAuth(BFF 세션 쿠키), 지도 권한은 Guard ReBAC |
@@ -74,9 +74,13 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 | `pin_tags` | pin_id, tag |
 | `pin_photos` | id, pin_id, uploaded_by, object_key, content_type(서버가 판별), size_bytes |
 | `visit_logs` | id, pin_id, user_id, visited_on, note |
-| `friendship` | id, requester_id, addressee_id, status(PENDING/ACCEPTED), 양방향 중복 방지 유니크 |
-| `party_group` | id, owner_id, name, persistent(bool) |
-| `party_group_member` | group_id, user_id |
+| `party_users` | id(Doro 사용자 ID), username(친구가 나를 찾는 이름, 본인이 수정), nickname, color — 이메일은 저장하지 않는다 |
+| `friendships` | 정렬된 (user_low_id, user_high_id) 유니크, requester_id, status(PENDING/ACCEPTED) |
+| `friend_invites` | owner_id 당 하나, code_hash, code_enc(암호화), expires_at |
+| `map_user_shares` | (map_id, user_id), role(VIEWER/EDITOR) — 친구에게 공유 |
+| `party_groups` / `party_group_members` | 모임, (group_id, user_id) + role(OWNER/MEMBER), 방장은 모임마다 한 명 |
+| `group_invites` | group_id 당 하나(친구 초대 링크와 같은 방식) |
+| `map_group_shares` | (map_id, group_id), shared_by — 내 지도를 모임에 공유(모임 멤버 모두 viewer) |
 
 원칙:
 - 사적 메모는 `pin` 과 분리된 테이블로 두어 응답 매핑 실수로 인한 노출을 구조적으로 막는다.
@@ -87,23 +91,28 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 ## 4. 권한 (Guard 스키마)
 
 ```
+type party_group {
+  relation owner: user
+  relation member: owner | user
+}
+
 type party_map {
   relation owner: user
-  relation editor: user
-  relation viewer: user
-  permission edit = owner + editor
-  permission view = edit + viewer
+  relation editor: owner | user
+  relation viewer: editor | user | party_group#member
 }
 ```
 
-실제 DSL 문법은 Doro가 지원하는 형태(`blog-schema.doro` 참조)에 맞춰 작성하고, **전역 단일 스키마이므로 `GET` 으로 받은 활성 DSL에 병합해 `POST`** 한다(`BlogSchemaMerger` 패턴).
+실제 DSL 은 `src/main/resources/party-schema.doro` 이고, **전역 단일 스키마이므로 `GET` 으로 받은 활성 DSL 에 병합해 `POST`** 한다. 다른 서비스의 타입은 건드리지 않고, `party_*` 타입은 없으면 덧붙이고 내용이 바뀌었으면 제자리에서 교체한다(`PartySchemaMerger`).
 
-- 친구 관계·모임은 "누구에게 공유할지"를 고르는 수단이고, 실제 접근 판정은 `party_map` 튜플만 쓴다.
-- 지도를 모임에 공유하면 멤버별 튜플을 쓴다(초기 방식). 모임 멤버 변경 시 튜플 동기화가 필요하며, Guard가 userset 참조를 지원하면 이후 전환을 검토한다.
-- **겹쳐보기는 내가 `view` 권한을 가진 지도만 대상**으로 한다. 친구라도 공유하지 않은 지도는 보이지 않는다.
-- 친구 해제 시 해제한 쪽이 준 공유 권한은 회수한다(기본 정책, 구현 전 재확인).
-- 핀 수정·삭제는 "내가 꽂은 핀" 또는 "지도 주인"만 할 수 있다(editor 가 남의 핀을 고치지 못하게). 지도 수정·삭제는 owner 만 가능하다.
-- 개수 상한(지도 50/사용자, 핀 2000/지도, 태그 10/핀)은 환경변수로 조정하며, 동시 요청에서도 지켜지도록 사용자·지도 행을 잠근 뒤 센다.
+- **지도 접근은 `party_map` 튜플만으로 판정**한다. 친구·모임은 "누구에게 공유할지"를 고르는 수단이다.
+- 친구에게 공유 = `party_map:M#editor|viewer@user:U`. 모임에 공유 = `party_map:M#viewer@party_group:G#member`(사용자 집합).
+  멤버가 들고 나면 `party_group:G#member@user:U` 튜플만 바뀌고 지도 쪽 튜플은 그대로이므로, **멤버십 변경이 곧 접근 변경**이다(실제 Guard 로 검증).
+- 겹쳐보기·목록은 내가 볼 수 있는 지도(내가 만든 것 + 직접 공유받은 것 + 내가 속한 모임에 공유된 것)만 대상으로 한다. 직접 공유와 모임 공유가 겹치면 직접 공유의 권한이 이긴다.
+- DB 의 공유·멤버 행이 원본이고 Guard 튜플은 그에 맞춰 쓰고 지운다(쓰기는 트랜잭션 안에서 실패하면 함께 되돌리고, 삭제는 커밋된 뒤에).
+- **친구를 끊으면** 끊은 쪽이 상대에게 준 공유를 회수한다(상대가 나에게 준 공유는 그대로). **모임을 나가거나 내보내지면** 그 사람이 모임에 공유한 지도도 거둔다. 지도·모임을 지우면 관련 튜플을 모두 정리한다.
+- 핀 수정·삭제는 "내가 꽂은 핀" 또는 "지도 주인"만 할 수 있다(editor 가 남의 핀을 고치지 못하게). 지도 수정·삭제와 공유 관리는 owner 만 가능하다.
+- 개수 상한(지도 50/사용자, 핀 2000/지도, 태그 10/핀, 친구 200, 공유 50/지도, 모임 20/사용자, 멤버 50/모임 등)은 환경변수로 조정하며, 동시 요청에서도 지켜지도록 행을 잠근 뒤 센다.
 
 ## 5. API 초안 (`/api/v1`, 공통 응답 봉투)
 
@@ -115,8 +124,13 @@ type party_map {
 | 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
 | 사적 메모 | `GET /maps/{id}/private-notes`(내 것 전체), `PUT/DELETE /maps/{id}/pins/{pinId}/private-note` |
 | 사진 | `POST/GET /maps/{id}/pins/{pinId}/photos`(multipart `file`), `GET .../photos/{photoId}/content`, `DELETE .../photos/{photoId}` |
-| 친구 | `POST /friends/requests`, `POST /friends/requests/{id}/accept`, `GET /friends` |
-| 모임 | `POST/GET /groups`, `PUT/DELETE /groups/{id}/members/{userId}` |
+| 프로필 | `GET/PATCH /me`(닉네임·사용자명) |
+| 친구 | `GET /friends`, `POST /friends/requests {username}`, `POST /friends/requests/{id}/accept`, `DELETE /friends/requests/{id}`, `DELETE /friends/{userId}` |
+| 친구 초대 링크 | `GET/POST/DELETE /friends/invite`, `GET /friends/invite/{code}`(미리보기), `POST /friends/invite/{code}/accept` |
+| 지도 공유(친구) | `GET /maps/{id}/shares`, `PUT/DELETE /maps/{id}/shares/{userId}`(DELETE 는 주인 또는 공유받은 본인), `GET /maps/{id}/members` |
+| 모임 | `POST/GET /groups`, `GET/PATCH/DELETE /groups/{id}`, `DELETE /groups/{id}/members/me`·`/{userId}`, `POST /groups/{id}/members {userId}`(친구 초대), `PUT /groups/{id}/owner`(방장 넘기기), `GET /groups/{id}/maps` |
+| 모임 초대 링크 | `GET/POST/DELETE /groups/{id}/invite`, `GET /groups/invite/{code}`, `POST /groups/invite/{code}/join` |
+| 모임에 지도 공유 | `GET /maps/{id}/groups`, `PUT/DELETE /maps/{id}/groups/{groupId}` |
 | 겹쳐보기 | `GET /overlay?mapIds=...` (보기 권한이 있는 지도만 반환) |
 | 추천 | `GET /groups/{id}/recommendations`, `GET /overlay/recommendations?mapIds=...` |
 

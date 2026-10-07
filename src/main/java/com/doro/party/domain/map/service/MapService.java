@@ -9,9 +9,9 @@ import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.map.entity.PartyMap;
 import com.doro.party.domain.map.repository.PartyMapRepository;
 import com.doro.party.domain.pin.photo.PinPhotoRepository;
-import com.doro.party.domain.share.MapUserShare;
+import com.doro.party.domain.group.GroupMapService;
+import com.doro.party.domain.group.MapGroupShareRepository;
 import com.doro.party.domain.share.MapUserShareRepository;
-import com.doro.party.domain.share.ShareRole;
 import com.doro.party.domain.share.ShareService;
 import com.doro.party.domain.pin.repository.PinRepository;
 import com.doro.party.domain.user.entity.PartyUser;
@@ -42,6 +42,9 @@ public class MapService {
     private final PinPhotoRepository photos;
     private final MapUserShareRepository shares;
     private final ShareService shareService;
+    private final MapAssembler assembler;
+    private final MapGroupShareRepository groupShares;
+    private final GroupMapService groupMapService;
     private final PartyUserRepository users;
     private final PartyUserService userService;
     private final GuardTuples guardTuples;
@@ -66,31 +69,24 @@ public class MapService {
         // party_map:<id>#owner@user:<userId>. 쓰기에 실패하면 예외로 DB 도 되돌린다(주인 없는 지도가 생기지 않게).
         guardTuples.write(PartyGuard.MAP, saved.getId().toString(), PartyGuard.OWNER, PartyGuard.USER, user.getId().toString());
         log.info("Map created: mapId={}, ownerId={}", saved.getId(), user.getId());
-        return MapResponse.from(saved, MapRole.OWNER, user, 0);
+        return MapResponse.from(saved, MapRole.OWNER, user, List.of(), 0);
     }
 
-    /** 내가 볼 수 있는 지도: 내가 만든 지도와 친구가 공유한 지도. 권한(role)과 주인 정보를 함께 준다. */
+    /** 내가 볼 수 있는 지도: 내가 만든 지도, 친구가 직접 공유한 지도, 내가 속한 모임에 공유된 지도. 권한(role)과 주인 정보를 함께 준다. */
     @Transactional(readOnly = true)
     public List<MapResponse> listAccessible(DoroUser doroUser) {
         PartyUser user = userService.getOrCreateUser(doroUser);
-        List<PartyMap> owned = maps.findAllByOwnerIdOrderByCreatedAtDesc(user.getId());
-        List<MapUserShare> sharedWithMe = shares.findByUserId(user.getId());
-        Map<UUID, ShareRole> sharedRoles = sharedWithMe.stream().collect(Collectors.toMap(MapUserShare::mapId, MapUserShare::getRole));
-        List<PartyMap> shared = maps.findAllById(sharedRoles.keySet()).stream()
-                .sorted(java.util.Comparator.comparing(PartyMap::getName)).toList();
-        List<PartyMap> all = new java.util.ArrayList<>(owned);
-        all.addAll(shared);
-        if (all.isEmpty()) {
-            return List.of();
-        }
-        Map<UUID, Long> counts = pins.countByMapIds(all.stream().map(PartyMap::getId).toList()).stream()
-                .collect(Collectors.toMap(PinRepository.PinCount::getMapId, PinRepository.PinCount::getCount));
-        Map<UUID, PartyUser> owners = users.findAllById(all.stream().map(PartyMap::getOwnerId).distinct().toList()).stream()
-                .collect(Collectors.toMap(PartyUser::getId, Function.identity()));
-        return all.stream()
-                .map(map -> MapResponse.from(map, map.isOwnedBy(user.getId()) ? MapRole.OWNER : toRole(sharedRoles.get(map.getId())),
-                        owners.get(map.getOwnerId()), counts.getOrDefault(map.getId(), 0L)))
-                .toList();
+        Map<UUID, PartyMap> visible = new java.util.LinkedHashMap<>();
+        maps.findAllByOwnerIdOrderByCreatedAtDesc(user.getId()).forEach(map -> visible.put(map.getId(), map));
+
+        java.util.Set<UUID> sharedIds = new java.util.LinkedHashSet<>();
+        shares.findByUserId(user.getId()).forEach(share -> sharedIds.add(share.mapId()));
+        groupShares.findVisibleTo(user.getId()).forEach(share -> sharedIds.add(share.mapId()));
+        sharedIds.removeAll(visible.keySet());
+        maps.findAllById(sharedIds).stream()
+                .sorted(java.util.Comparator.comparing(PartyMap::getName))
+                .forEach(map -> visible.put(map.getId(), map));
+        return assembler.assemble(new java.util.ArrayList<>(visible.values()), user.getId());
     }
 
     @Transactional(readOnly = true)
@@ -112,6 +108,7 @@ public class MapService {
         List<String> photoKeys = photos.objectKeysOfMap(mapId);
         // 공유받은 사람들의 권한(Guard)도 지도와 함께 정리한다(공유 행은 지도와 함께 DB 가 지운다)
         shareService.releaseGuardForMap(mapId);
+        groupMapService.releaseGuardForMap(mapId);
         maps.delete(map);
         // 지도와 핀·사진 기록은 DB 가 함께 지운다. 스토리지의 사진 파일은 커밋 뒤에 지운다.
         storageCleanup.deleteAfterCommit(photoKeys);
@@ -121,19 +118,7 @@ public class MapService {
     }
 
     private MapResponse respond(PartyMap map, UUID viewerId) {
-        PartyUser owner = users.findById(map.getOwnerId()).orElseThrow(() -> new PartyException(ErrorCode.USER_NOT_FOUND));
-        MapRole role;
-        if (map.isOwnedBy(viewerId)) {
-            role = MapRole.OWNER;
-        } else {
-            // 직접 공유가 없는데 볼 수 있다면 다른 경로(모임)로 보는 것이므로 열람자다
-            role = shares.findById(MapUserShare.Key.of(map.getId(), viewerId)).map(share -> toRole(share.getRole())).orElse(MapRole.VIEWER);
-        }
-        return MapResponse.from(map, role, owner, pins.countByMapId(map.getId()));
-    }
-
-    private static MapRole toRole(ShareRole role) {
-        return role == ShareRole.EDITOR ? MapRole.EDITOR : MapRole.VIEWER;
+        return assembler.assemble(map, viewerId);
     }
 
     private PartyMap find(UUID mapId) {

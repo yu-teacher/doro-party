@@ -10,6 +10,7 @@ public enum ErrorCode {
     // 400 Bad Request
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON-400-01", "잘못된 입력값입니다."),
     CANNOT_FRIEND_SELF(HttpStatus.BAD_REQUEST, "FRIEND-400-01", "자기 자신과는 친구가 될 수 없습니다."),
+    OWNER_CANNOT_LEAVE(HttpStatus.BAD_REQUEST, "GROUP-400-01", "방장은 모임을 나갈 수 없습니다. 방장을 다른 멤버에게 넘기거나 모임을 삭제하세요."),
     NOT_FRIENDS(HttpStatus.BAD_REQUEST, "FRIEND-400-02", "친구에게만 할 수 있습니다."),
     LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "LIMIT-400-01", "허용된 개수를 넘었습니다."),
     FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD-413-01", "사진 크기가 너무 큽니다."),
@@ -25,6 +26,8 @@ public enum ErrorCode {
     // 404 Not Found
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER-404-01", "존재하지 않는 사용자입니다."),
     FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-01", "존재하지 않는 친구 요청입니다."),
+    GROUP_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUP-404-01", "존재하지 않는 모임입니다."),
+    GROUP_MEMBER_NOT_FOUND(HttpStatus.NOT_FOUND, "GROUP-404-02", "모임의 멤버가 아닙니다."),
     SHARE_NOT_FOUND(HttpStatus.NOT_FOUND, "SHARE-404-01", "공유 정보를 찾을 수 없습니다."),
     FRIEND_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-02", "친구가 아닙니다."),
     INVITE_NOT_FOUND(HttpStatus.NOT_FOUND, "INVITE-404-01", "유효하지 않거나 만료된 초대 링크입니다."),

@@ -34,6 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "party.limits.max-photo-bytes=2048",
         "party.limits.max-shares-per-map=2",
         "party.limits.max-pending-friend-requests=2",
+        "party.limits.max-members-per-group=2",
+        "party.limits.max-groups-per-user=2",
+        "party.limits.max-groups-per-map=1",
 })
 class LimitsHttpTest extends PartyHttpTestBase {
 
@@ -206,5 +209,68 @@ class LimitsHttpTest extends PartyHttpTestBase {
         mockMvc.perform(sender.sign(post("/api/v1/friends/requests").contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"" + third + "\"}")))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
         assertThat(jdbc.queryForObject("select count(*) from friendships where requester_id = ?::uuid", Long.class, sender.id().toString())).isEqualTo(2L);
+    }
+
+    private String newGroup(TestUser owner, String name) throws Exception {
+        String body = mockMvc.perform(owner.sign(post("/api/v1/groups").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}")))
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data.id");
+    }
+
+    private String groupInvite(TestUser owner, String groupId) throws Exception {
+        String body = mockMvc.perform(owner.sign(post("/api/v1/groups/{g}/invite", groupId))).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data.code");
+    }
+
+    @Test
+    @DisplayName("한 사람이 속할 수 있는 모임 수 상한: 만들기와 링크 가입 모두 같은 상한을 센다")
+    void groupsPerUserLimit() throws Exception {
+        TestUser user = newUser();
+        TestUser other = newUser();
+        newGroup(user, "하나");
+        newGroup(user, "둘");
+
+        mockMvc.perform(user.sign(post("/api/v1/groups").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"셋\"}")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        String othersGroup = newGroup(other, "남의 모임");
+        mockMvc.perform(user.sign(post("/api/v1/groups/invite/{c}/join", groupInvite(other, othersGroup))))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        assertThat(jdbc.queryForObject("select count(*) from party_group_members where user_id = ?::uuid", Long.class, user.id().toString())).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("모임 멤버 수 상한: 동시에 여러 명이 들어와도 상한을 넘지 못한다")
+    void groupMemberLimitHoldsUnderConcurrency() throws Exception {
+        TestUser owner = newUser();
+        String groupId = newGroup(owner, "정원");
+        String code = groupInvite(owner, groupId);
+        List<TestUser> guests = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            guests.add(newUser());
+        }
+        List<Callable<Integer>> calls = new ArrayList<>();
+        for (TestUser guest : guests) {
+            calls.add(() -> mockMvc.perform(guest.sign(post("/api/v1/groups/invite/{c}/join", code))).andReturn().getResponse().getStatus());
+        }
+
+        List<Integer> statuses = parallel(calls);
+
+        assertThat(statuses.stream().filter(s -> s == 200).count()).isEqualTo(1);
+        assertThat(statuses.stream().filter(s -> s == 400).count()).isEqualTo(4);
+        assertThat(jdbc.queryForObject("select count(*) from party_group_members where group_id = ?::uuid", Long.class, groupId)).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("지도 하나를 공유할 수 있는 모임 수 상한")
+    void groupsPerMapLimit() throws Exception {
+        TestUser owner = newUser();
+        String first = newGroup(owner, "첫째");
+        String second = newGroup(owner, "둘째");
+        String mapId = createMap(owner, "여러 모임");
+
+        mockMvc.perform(owner.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/maps/{m}/groups/{g}", mapId, first))).andExpect(status().isOk());
+        mockMvc.perform(owner.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/maps/{m}/groups/{g}", mapId, first))).andExpect(status().isOk());
+        mockMvc.perform(owner.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/maps/{m}/groups/{g}", mapId, second)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
     }
 }

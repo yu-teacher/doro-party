@@ -26,14 +26,22 @@ public class GuardTuples {
 
     /** 관계 튜플을 쓴다. Guard 쓰기가 실패하면 예외가 전파되어 호출한 트랜잭션이 롤백된다. */
     public void write(String namespace, String objectId, String relation, String subjectNamespace, String subjectId) {
-        guardClient.writeTupleOrThrow(namespace, objectId, relation, subjectNamespace, subjectId, null);
+        write(namespace, objectId, relation, subjectNamespace, subjectId, null);
+    }
+
+    /**
+     * 사용자 집합을 주체로 하는 튜플을 쓴다. 예: {@code party_map:M#viewer@party_group:G#member} 는
+     * "모임 G 의 멤버는 지도 M 의 viewer" 라는 뜻이라, 멤버가 들고 나도 지도 쪽 튜플을 고칠 필요가 없다.
+     */
+    public void write(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
+        guardClient.writeTupleOrThrow(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
 
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCompletion(int status) {
                     if (status != STATUS_COMMITTED) {
-                        cleanUpOrphan(namespace, objectId, relation, subjectNamespace, subjectId);
+                        cleanUpOrphan(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
                     }
                 }
             });
@@ -42,30 +50,35 @@ public class GuardTuples {
 
     /** 현재 트랜잭션이 커밋된 뒤에 튜플을 지운다. 트랜잭션이 없으면 바로 지운다. */
     public void deleteAfterCommit(String namespace, String objectId, String relation, String subjectNamespace, String subjectId) {
+        deleteAfterCommit(namespace, objectId, relation, subjectNamespace, subjectId, null);
+    }
+
+    /** {@link #write(String, String, String, String, String, String)} 로 쓴 사용자 집합 튜플을 커밋된 뒤에 지운다. */
+    public void deleteAfterCommit(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            deleteQuietly(namespace, objectId, relation, subjectNamespace, subjectId);
+            deleteQuietly(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                deleteQuietly(namespace, objectId, relation, subjectNamespace, subjectId);
+                deleteQuietly(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
             }
         });
     }
 
-    private void cleanUpOrphan(String namespace, String objectId, String relation, String subjectNamespace, String subjectId) {
+    private void cleanUpOrphan(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
         try {
-            guardClient.deleteTuple(namespace, objectId, relation, subjectNamespace, subjectId);
+            guardClient.deleteTuple(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
             log.warn("Rolled back: removed orphan Guard tuple {}:{}#{}", namespace, objectId, relation);
         } catch (RuntimeException e) {
             log.error("Rolled back but could not remove Guard tuple {}:{}#{} - needs manual cleanup", namespace, objectId, relation, e);
         }
     }
 
-    private void deleteQuietly(String namespace, String objectId, String relation, String subjectNamespace, String subjectId) {
+    private void deleteQuietly(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
         try {
-            guardClient.deleteTuple(namespace, objectId, relation, subjectNamespace, subjectId);
+            guardClient.deleteTuple(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
         } catch (RuntimeException e) {
             // 글/댓글은 이미 지워졌으므로 사용자 요청은 성공시키고, 남은 튜플은 추적할 수 있게 ERROR 로 남긴다.
             log.error("Committed but could not delete Guard tuple {}:{}#{} - stale permission remains", namespace, objectId, relation, e);

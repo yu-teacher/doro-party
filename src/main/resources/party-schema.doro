@@ -1,8 +1,15 @@
 # DORO Party ReBAC Zanzibar Schema
 
+# 모임(카톡방처럼 사람들을 묶는 단위). 방장(owner)은 멤버이기도 하다.
+type party_group {
+  relation owner: user
+  relation member: owner | user
+}
+
 # 지도 단위 공유. owner 는 만든 사람, editor 는 핀을 추가·수정할 수 있고, viewer 는 보기만 한다.
+# 모임에 공유하면 그 모임의 멤버 모두가 viewer 가 된다(party_group#member). 멤버가 들고 나면 접근도 따라서 바뀐다.
 type party_map {
   relation owner: user
   relation editor: owner | user
-  relation viewer: editor | user
+  relation viewer: editor | user | party_group#member
 }
