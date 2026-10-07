@@ -50,11 +50,10 @@ export default function PhotoViewer({ mapId, pinId, photos, startIndex, canDelet
     setError(null);
     try {
       await onDelete(photo.id);
-      setConfirming(false);
-      setIndex((current) => Math.max(0, Math.min(current, photos.length - 2)));
+      // 지우고 나면 전체 화면을 닫고 핀 상세로 돌아간다(다음 사진이 자동으로 이어 보이지 않게)
+      onClose();
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : '사진을 지우지 못했어요.');
-    } finally {
       setBusy(false);
     }
   };
