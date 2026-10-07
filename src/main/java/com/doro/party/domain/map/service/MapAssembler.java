@@ -2,6 +2,7 @@ package com.doro.party.domain.map.service;
 
 import com.doro.party.common.exception.ErrorCode;
 import com.doro.party.common.exception.PartyException;
+import com.doro.party.domain.friend.FriendshipRepository;
 import com.doro.party.domain.group.MapGroupShare;
 import com.doro.party.domain.group.MapGroupShareRepository;
 import com.doro.party.domain.group.PartyGroup;
@@ -10,6 +11,7 @@ import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.map.dto.MapDtos.MapRole;
 import com.doro.party.domain.map.entity.PartyMap;
 import com.doro.party.domain.pin.repository.PinRepository;
+import com.doro.party.domain.share.FriendAccess;
 import com.doro.party.domain.share.MapUserShare;
 import com.doro.party.domain.share.MapUserShareRepository;
 import com.doro.party.domain.share.ShareRole;
@@ -23,6 +25,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -40,6 +43,7 @@ public class MapAssembler {
     private final PartyGroupRepository groups;
     private final PinRepository pins;
     private final PartyUserRepository users;
+    private final FriendshipRepository friendships;
 
     public List<MapResponse> assemble(List<PartyMap> maps, UUID viewerId) {
         if (maps.isEmpty()) {
@@ -53,6 +57,7 @@ public class MapAssembler {
         Map<UUID, ShareRole> directRoles = shares.findByUserId(viewerId).stream()
                 .collect(Collectors.toMap(MapUserShare::mapId, MapUserShare::getRole));
         Map<UUID, List<String>> viaGroups = viaGroupNames(viewerId);
+        Set<UUID> friendIds = friendIdsIfNeeded(maps, viewerId);
 
         List<MapResponse> result = new ArrayList<>();
         for (PartyMap map : maps) {
@@ -60,8 +65,10 @@ public class MapAssembler {
             if (owner == null) {
                 throw new PartyException(ErrorCode.USER_NOT_FOUND);
             }
-            MapRole role = roleOf(map, viewerId, directRoles.get(map.getId()));
-            List<String> via = role == MapRole.OWNER || directRoles.containsKey(map.getId()) ? List.of() : viaGroups.getOrDefault(map.getId(), List.of());
+            MapRole role = roleOf(map, viewerId, directRoles.get(map.getId()), friendIds.contains(map.getOwnerId()));
+            // 모임 이름은 모임 덕분에 보는 경우에만 보여 준다(주인이거나, 직접 공유받았거나, 친구 공개로 보면 비운다)
+            boolean viaFriend = map.getFriendAccess().isPublic() && friendIds.contains(map.getOwnerId());
+            List<String> via = role == MapRole.OWNER || directRoles.containsKey(map.getId()) || viaFriend ? List.of() : viaGroups.getOrDefault(map.getId(), List.of());
             result.add(MapResponse.from(map, role, owner, via, counts.getOrDefault(map.getId(), 0L)));
         }
         return result;
@@ -71,12 +78,25 @@ public class MapAssembler {
         return assemble(List.of(map), viewerId).get(0);
     }
 
-    /** 직접 공유가 없는데 볼 수 있다면 모임을 통해 보는 것이므로 열람자다. */
-    private static MapRole roleOf(PartyMap map, UUID viewerId, ShareRole direct) {
+    /**
+     * 내 권한: 주인이면 OWNER. 아니면 직접 공유(viewer/editor)와 친구 공개(주인의 친구일 때만) 중 더 높은 권한.
+     * 둘 다 아닌데 볼 수 있다면 모임을 통해 보는 것이므로 열람자다.
+     */
+    private static MapRole roleOf(PartyMap map, UUID viewerId, ShareRole direct, boolean ownerIsMyFriend) {
         if (map.isOwnedBy(viewerId)) {
             return MapRole.OWNER;
         }
-        return direct == ShareRole.EDITOR ? MapRole.EDITOR : MapRole.VIEWER;
+        boolean editorByFriend = ownerIsMyFriend && map.getFriendAccess() == FriendAccess.EDITOR;
+        return direct == ShareRole.EDITOR || editorByFriend ? MapRole.EDITOR : MapRole.VIEWER;
+    }
+
+    /** 친구 공개 권한을 따지려면 내 친구 목록이 필요하다. 남이 만든 공개 지도가 없으면 조회하지 않는다. */
+    private Set<UUID> friendIdsIfNeeded(List<PartyMap> maps, UUID viewerId) {
+        boolean needed = maps.stream().anyMatch(map -> !map.isOwnedBy(viewerId) && map.getFriendAccess().isPublic());
+        if (!needed) {
+            return Set.of();
+        }
+        return friendships.findFriends(viewerId).stream().map(friendship -> friendship.otherThan(viewerId)).collect(Collectors.toSet());
     }
 
     /** 내가 속한 모임들 중 각 지도를 공유한 모임의 이름(이름순). */

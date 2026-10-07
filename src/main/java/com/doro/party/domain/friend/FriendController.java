@@ -4,6 +4,7 @@ import com.doro.party.common.exception.ErrorCode;
 import com.doro.party.common.exception.PartyException;
 import com.doro.party.common.response.ApiResponse;
 import com.doro.party.domain.friend.FriendDtos.AcceptResult;
+import com.doro.party.domain.friend.FriendDtos.FriendMapsOverview;
 import com.doro.party.domain.friend.FriendDtos.FriendRequestBody;
 import com.doro.party.domain.friend.FriendDtos.FriendsOverview;
 import com.doro.party.domain.friend.FriendDtos.InviteLinkResponse;
@@ -34,6 +35,7 @@ public class FriendController {
 
     private final FriendService friendService;
     private final FriendInviteService inviteService;
+    private final FriendMapService friendMapService;
 
     private static DoroUser authenticated(DoroUser user) {
         if (user == null || !user.isAuthenticated()) {
@@ -46,6 +48,12 @@ public class FriendController {
     @GetMapping
     public ApiResponse<FriendsOverview> overview(@CurrentDoroUser DoroUser user) {
         return ApiResponse.success(friendService.overview(authenticated(user)));
+    }
+
+    @Operation(summary = "친구 지도 둘러보기 (로그인)", description = "친구들이 친구 전체에게 공개해 둔 지도를 친구별로. 내 권한(role)이 함께 온다")
+    @GetMapping("/maps")
+    public ApiResponse<FriendMapsOverview> friendMaps(@CurrentDoroUser DoroUser user) {
+        return ApiResponse.success(friendMapService.browse(authenticated(user).userId()));
     }
 
     @Operation(summary = "사용자명으로 친구 요청 (로그인)", description = "상대가 이미 나에게 요청했다면 바로 친구가 된다")

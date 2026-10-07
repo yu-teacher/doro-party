@@ -5,12 +5,14 @@ public final class PartyGuard {
 
     public static final String MAP = "party_map";
     public static final String GROUP = "party_group";
+    public static final String FRIENDS = "party_friends";
     public static final String USER = "user";
 
     public static final String OWNER = "owner";
     public static final String EDITOR = "editor";
     public static final String VIEWER = "viewer";
     public static final String MEMBER = "member";
+    public static final String FRIEND = "friend";
 
     private PartyGuard() {
     }

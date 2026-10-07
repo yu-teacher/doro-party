@@ -9,8 +9,11 @@ import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.map.entity.PartyMap;
 import com.doro.party.domain.map.repository.PartyMapRepository;
 import com.doro.party.domain.pin.photo.PinPhotoRepository;
+import com.doro.party.domain.friend.FriendListTuples;
+import com.doro.party.domain.friend.FriendshipRepository;
 import com.doro.party.domain.group.GroupMapService;
 import com.doro.party.domain.group.MapGroupShareRepository;
+import com.doro.party.domain.share.FriendAccess;
 import com.doro.party.domain.share.MapUserShareRepository;
 import com.doro.party.domain.share.ShareService;
 import com.doro.party.domain.pin.repository.PinRepository;
@@ -50,6 +53,8 @@ public class MapService {
     private final GuardTuples guardTuples;
     private final StorageCleanup storageCleanup;
     private final PartyLimits limits;
+    private final FriendshipRepository friendships;
+    private final FriendListTuples friendList;
 
     @Transactional
     public MapResponse create(DoroUser doroUser, MapRequest request) {
@@ -109,12 +114,44 @@ public class MapService {
         // 공유받은 사람들의 권한(Guard)도 지도와 함께 정리한다(공유 행은 지도와 함께 DB 가 지운다)
         shareService.releaseGuardForMap(mapId);
         groupMapService.releaseGuardForMap(mapId);
+        if (map.getFriendAccess().isPublic()) {
+            guardTuples.deleteAfterCommit(PartyGuard.MAP, mapId.toString(), map.getFriendAccess().guardRelation(), PartyGuard.FRIENDS,
+                    map.getOwnerId().toString(), PartyGuard.FRIEND);
+        }
         maps.delete(map);
         // 지도와 핀·사진 기록은 DB 가 함께 지운다. 스토리지의 사진 파일은 커밋 뒤에 지운다.
         storageCleanup.deleteAfterCommit(photoKeys);
         // 커밋이 확정된 뒤에 권한을 지운다. 공유 튜플(editor/viewer)은 공유 기능(M3)에서 함께 정리한다.
         guardTuples.deleteAfterCommit(PartyGuard.MAP, mapId.toString(), PartyGuard.OWNER, PartyGuard.USER, map.getOwnerId().toString());
         log.info("Map deleted: mapId={}, photos={}", mapId, photoKeys.size());
+    }
+
+    /**
+     * 지도를 친구 전체에게 공개하는 범위를 바꾼다(주인만). 지금 친구와 앞으로 생길 친구 모두에게 적용되고, 친구를 끊으면 자동으로 보이지 않게 된다.
+     * DB 의 friend_access 가 원본이고 Guard 에는 주인의 친구 목록을 지도의 viewer/editor 로 거는 튜플 하나가 쓰인다.
+     * 같은 요청을 반복해도 안전하다.
+     */
+    @Transactional
+    public MapResponse setFriendAccess(UUID mapId, DoroUser doroUser, FriendAccess access) {
+        // 같은 지도에 대한 동시 변경을 직렬화한다(튜플 쓰기·삭제가 엇갈리지 않게)
+        PartyMap map = maps.findByIdForUpdate(mapId).orElseThrow(() -> new PartyException(ErrorCode.MAP_NOT_FOUND));
+        FriendAccess previous = map.getFriendAccess();
+        if (previous != access) {
+            String ownerId = map.getOwnerId().toString();
+            if (access.isPublic()) {
+                // 이 기능이 생기기 전에 맺은 친구에게도 적용되도록 주인의 친구 목록을 Guard 에 맞춰 둔다(이미 있는 것은 그대로)
+                friendList.ensureAll(map.getOwnerId(), friendships.findFriends(map.getOwnerId()).stream()
+                        .map(friendship -> friendship.otherThan(map.getOwnerId())).toList());
+                // 새 권한을 먼저 쓰고 이전 권한은 커밋된 뒤에 지운다(잠깐이라도 접근이 사라지는 일이 없게)
+                guardTuples.write(PartyGuard.MAP, mapId.toString(), access.guardRelation(), PartyGuard.FRIENDS, ownerId, PartyGuard.FRIEND);
+            }
+            if (previous.isPublic()) {
+                guardTuples.deleteAfterCommit(PartyGuard.MAP, mapId.toString(), previous.guardRelation(), PartyGuard.FRIENDS, ownerId, PartyGuard.FRIEND);
+            }
+            map.changeFriendAccess(access);
+            log.info("Map friend access changed: mapId={}, {} -> {}", mapId, previous, access);
+        }
+        return respond(map, doroUser.userId());
     }
 
     private MapResponse respond(PartyMap map, UUID viewerId) {

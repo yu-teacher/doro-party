@@ -6,10 +6,17 @@ type party_group {
   relation member: owner | user
 }
 
+# 사용자 한 명의 친구 목록(객체 ID = 그 사용자의 ID). 지도를 "친구 전체에게 공개"하면 이 집합 전체가 지도의 viewer/editor 가 된다.
+# 친구가 생기고 끊길 때 이 목록의 튜플만 바뀌므로, 공개한 지도들의 튜플을 하나씩 고칠 필요가 없다.
+type party_friends {
+  relation friend: user
+}
+
 # 지도 단위 공유. owner 는 만든 사람, editor 는 핀을 추가·수정할 수 있고, viewer 는 보기만 한다.
 # 모임에 공유하면 그 모임의 멤버 모두가 viewer 가 된다(party_group#member). 멤버가 들고 나면 접근도 따라서 바뀐다.
+# 친구 전체에게 공개하면 주인의 친구 목록(party_friends#friend)이 viewer 또는 editor 가 된다.
 type party_map {
   relation owner: user
-  relation editor: owner | user
-  relation viewer: editor | user | party_group#member
+  relation editor: owner | user | party_friends#friend
+  relation viewer: editor | user | party_group#member | party_friends#friend
 }

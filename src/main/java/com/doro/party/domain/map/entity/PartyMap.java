@@ -1,7 +1,10 @@
 package com.doro.party.domain.map.entity;
 
+import com.doro.party.domain.share.FriendAccess;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -38,6 +41,11 @@ public class PartyMap {
     @Column(length = 500)
     private String description;
 
+    /** 친구 전체에게 공개하는 범위(NONE 이면 비공개). Guard 튜플은 이 값에 맞춰 쓰인다. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "friend_access", nullable = false, length = 10)
+    private FriendAccess friendAccess = FriendAccess.NONE;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
@@ -56,6 +64,10 @@ public class PartyMap {
     public void update(String name, String description) {
         this.name = name;
         this.description = description;
+    }
+
+    public void changeFriendAccess(FriendAccess friendAccess) {
+        this.friendAccess = friendAccess;
     }
 
     public boolean isOwnedBy(UUID userId) {

@@ -1,6 +1,7 @@
 package com.doro.party.domain.map.controller;
 
 import com.doro.party.common.response.ApiResponse;
+import com.doro.party.domain.map.dto.MapDtos.FriendAccessRequest;
 import com.doro.party.domain.map.dto.MapDtos.MapRequest;
 import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.map.service.MapService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -60,6 +62,18 @@ public class MapController {
             @Valid @RequestBody MapRequest request
     ) {
         return ApiResponse.success(mapService.update(mapId, doroUser, request));
+    }
+
+    @Operation(summary = "친구 전체에게 공개 범위 바꾸기 (Guard: owner)",
+            description = "NONE(공개 안 함) / VIEWER(친구 전체가 보기) / EDITOR(친구 전체가 핀 추가·수정). 지금 친구와 앞으로 생길 친구 모두에게 적용되고, 친구를 끊으면 자동으로 보이지 않는다")
+    @DoroGuard(namespace = PartyGuard.MAP, object = "#mapId", relation = PartyGuard.OWNER)
+    @PutMapping("/{mapId}/friend-access")
+    public ApiResponse<MapResponse> setFriendAccess(
+            @PathVariable("mapId") UUID mapId,
+            @CurrentDoroUser DoroUser doroUser,
+            @Valid @RequestBody FriendAccessRequest request
+    ) {
+        return ApiResponse.success(mapService.setFriendAccess(mapId, doroUser, request.access()));
     }
 
     @Operation(summary = "지도 삭제 (Guard: owner)", description = "지도와 그 안의 핀이 모두 삭제된다")

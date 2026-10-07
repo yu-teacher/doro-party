@@ -35,6 +35,7 @@ public class FriendService {
     private final PartyUserService userService;
     private final PartyLimits limits;
     private final ShareService shareService;
+    private final FriendListTuples friendList;
 
     @Transactional(readOnly = true)
     public FriendsOverview overview(DoroUser doroUser) {
@@ -77,7 +78,9 @@ public class FriendService {
         if (existing.isPending() && !existing.getRequesterId().equals(me.getId())) {
             requireRoomForFriend(me.getId());
             requireRoomForFriend(target.getId());
-            friendships.acceptPending(existing.getId());
+            if (friendships.acceptPending(existing.getId()) == 1) {
+                friendList.added(me.getId(), target.getId());
+            }
             log.info("Friend request matched and accepted: a={}, b={}", me.getId(), target.getId());
             return new RequestResult("ACCEPTED", UserSummary.from(target));
         }
@@ -94,6 +97,7 @@ public class FriendService {
         requireRoomForFriend(me);
         requireRoomForFriend(request.getRequesterId());
         if (friendships.acceptPending(friendshipId) == 1) {
+            friendList.added(me, request.getRequesterId());
             log.info("Friend request accepted: requester={}, accepter={}", request.getRequesterId(), me);
         }
     }
@@ -115,6 +119,8 @@ public class FriendService {
         if (friendships.deleteAccepted(pair[0], pair[1]) == 0) {
             throw new PartyException(ErrorCode.FRIEND_NOT_FOUND);
         }
+        // 서로의 친구 목록에서 빼면, 친구 전체에게 공개해 둔 지도(양쪽 모두)도 자동으로 보이지 않게 된다
+        friendList.removed(doroUser.userId(), otherUserId);
         // 끊은 쪽이 상대에게 공유해 둔 지도는 함께 회수한다(상대가 나에게 준 공유는 그대로)
         int revoked = shareService.revokeGiven(doroUser.userId(), otherUserId);
         log.info("Unfriended: a={}, b={}, revokedShares={}", doroUser.userId(), otherUserId, revoked);
@@ -133,6 +139,7 @@ public class FriendService {
         requireRoomForFriend(me);
         requireRoomForFriend(other);
         friendships.upsertAccepted(UUID.randomUUID(), pair[0], pair[1], me);
+        friendList.added(me, other);
         log.info("Friends connected: a={}, b={}", me, other);
     }
 

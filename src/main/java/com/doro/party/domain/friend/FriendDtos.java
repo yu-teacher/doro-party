@@ -1,5 +1,6 @@
 package com.doro.party.domain.friend;
 
+import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.user.dto.PartyUserDtos.UserSummary;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -37,5 +38,13 @@ public final class FriendDtos {
     }
 
     public record AcceptResult(UserSummary friend) {
+    }
+
+    /** 친구 한 명이 공개한 지도들 */
+    public record FriendMaps(UserSummary friend, List<MapResponse> maps) {
+    }
+
+    /** 친구 지도 둘러보기: 친구 전체에게 공개된 지도를 친구별로 */
+    public record FriendMapsOverview(List<FriendMaps> friends) {
     }
 }

@@ -1,8 +1,10 @@
 package com.doro.party.domain.map.dto;
 
 import com.doro.party.domain.map.entity.PartyMap;
+import com.doro.party.domain.share.FriendAccess;
 import com.doro.party.domain.user.entity.PartyUser;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
@@ -21,6 +23,10 @@ public final class MapDtos {
             @NotBlank @Size(max = NAME_MAX) String name,
             @Size(max = DESCRIPTION_MAX) String description
     ) {
+    }
+
+    /** 친구 전체에게 공개하는 범위를 바꾼다. */
+    public record FriendAccessRequest(@NotNull FriendAccess access) {
     }
 
     /** 이 지도에서 내 권한: 주인(OWNER) / 핀을 꽂을 수 있는 편집자(EDITOR) / 보기만 하는 열람자(VIEWER). */
@@ -42,13 +48,16 @@ public final class MapDtos {
             MapRole role,
             /** 이 지도를 내가 볼 수 있게 해 준 모임들의 이름(내가 만든 지도나 직접 공유받은 지도면 비어 있다) */
             List<String> viaGroups,
+            /** 이 지도를 친구 전체에게 공개한 범위(NONE 이면 공개하지 않음) */
+            FriendAccess friendAccess,
             long pinCount,
             Instant createdAt,
             Instant updatedAt
     ) {
         public static MapResponse from(PartyMap map, MapRole role, PartyUser owner, List<String> viaGroups, long pinCount) {
             return new MapResponse(map.getId(), map.getName(), map.getDescription(), map.getOwnerId(),
-                    owner.getNickname(), owner.getColor(), role == MapRole.OWNER, role, viaGroups, pinCount, map.getCreatedAt(), map.getUpdatedAt());
+                    owner.getNickname(), owner.getColor(), role == MapRole.OWNER, role, viaGroups, map.getFriendAccess(), pinCount,
+                    map.getCreatedAt(), map.getUpdatedAt());
         }
     }
 }
