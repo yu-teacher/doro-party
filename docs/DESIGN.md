@@ -68,7 +68,7 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 | 테이블 | 컬럼 요점 |
 |---|---|
 | `party_user` | id, doro_user_id(unique), nickname, color |
-| `party_map` | id, owner_id, name, description, created_at |
+| `party_map` | id, owner_id, name, description, **friend_access**(NONE/VIEWER/EDITOR, 기본 NONE — 친구 전체에게 공개하는 범위), created_at |
 | `pins` | id, map_id, created_by, lat, lng, name, shared_memo, status(WISH/VISITED), rating(1..5, null), revisit_intent(AGAIN/ONCE/null), created_at |
 | `pin_private_notes` | (pin_id, user_id), body — 쓴 사람 본인에게만 보인다 |
 | `pin_tags` | pin_id, tag |
@@ -96,10 +96,15 @@ type party_group {
   relation member: owner | user
 }
 
+# 사용자 한 명의 친구 목록(객체 ID = 그 사용자). "친구 전체에게 공개"가 이 집합을 가리킨다.
+type party_friends {
+  relation friend: user
+}
+
 type party_map {
   relation owner: user
-  relation editor: owner | user
-  relation viewer: editor | user | party_group#member
+  relation editor: owner | user | party_friends#friend
+  relation viewer: editor | user | party_group#member | party_friends#friend
 }
 ```
 
@@ -108,7 +113,10 @@ type party_map {
 - **지도 접근은 `party_map` 튜플만으로 판정**한다. 친구·모임은 "누구에게 공유할지"를 고르는 수단이다.
 - 친구에게 공유 = `party_map:M#editor|viewer@user:U`. 모임에 공유 = `party_map:M#viewer@party_group:G#member`(사용자 집합).
   멤버가 들고 나면 `party_group:G#member@user:U` 튜플만 바뀌고 지도 쪽 튜플은 그대로이므로, **멤버십 변경이 곧 접근 변경**이다(실제 Guard 로 검증).
-- 겹쳐보기·목록은 내가 볼 수 있는 지도(내가 만든 것 + 직접 공유받은 것 + 내가 속한 모임에 공유된 것)만 대상으로 한다. 직접 공유와 모임 공유가 겹치면 직접 공유의 권한이 이긴다.
+- **친구 전체에게 공개** = `party_map:M#viewer|editor@party_friends:<주인>#friend`(사용자 집합) 하나. 두 사람이 친구가 되면 서로의 `party_friends` 목록에 서로를 넣고(`party_friends:A#friend@user:B`),
+  끊으면 뺀다. 그래서 **새 친구에게 자동 적용되고, 끊으면 자동 회수**되며 공개한 지도들의 튜플은 건드리지 않는다. 처음 공개할 때는 이 기능 이전에 맺은 친구가 목록에 없을 수 있어 주인의 친구 목록을 DB 기준으로 한 번 채운다.
+  범위(NONE/VIEWER/EDITOR)는 `party_maps.friend_access` 가 원본이다. 직접 공유와 함께 있으면 더 높은 권한이 적용된다.
+- 겹쳐보기·목록은 내가 볼 수 있는 지도(내가 만든 것 + 직접 공유받은 것 + 내가 속한 모임에 공유된 것)만 대상으로 한다(친구 전체 공개 지도는 목록에 섞지 않고 "친구 지도 둘러보기"에서 연다. 열어 본 지도는 겹쳐보기에도 쓸 수 있다). 직접 공유와 모임 공유가 겹치면 직접 공유의 권한이 이긴다.
 - DB 의 공유·멤버 행이 원본이고 Guard 튜플은 그에 맞춰 쓰고 지운다(쓰기는 트랜잭션 안에서 실패하면 함께 되돌리고, 삭제는 커밋된 뒤에).
 - **친구를 끊으면** 끊은 쪽이 상대에게 준 공유를 회수한다(상대가 나에게 준 공유는 그대로). **모임을 나가거나 내보내지면** 그 사람이 모임에 공유한 지도도 거둔다. 지도·모임을 지우면 관련 튜플을 모두 정리한다.
 - 핀 수정·삭제는 "내가 꽂은 핀" 또는 "지도 주인"만 할 수 있다(editor 가 남의 핀을 고치지 못하게). 지도 수정·삭제와 공유 관리는 owner 만 가능하다.
@@ -127,6 +135,7 @@ type party_map {
 | 프로필 | `GET/PATCH /me`(닉네임·사용자명) |
 | 친구 | `GET /friends`, `POST /friends/requests {username}`, `POST /friends/requests/{id}/accept`, `DELETE /friends/requests/{id}`, `DELETE /friends/{userId}` |
 | 친구 초대 링크 | `GET/POST/DELETE /friends/invite`, `GET /friends/invite/{code}`(미리보기), `POST /friends/invite/{code}/accept` |
+| 친구 전체 공개 | `PUT /maps/{id}/friend-access {access: NONE\|VIEWER\|EDITOR}`(주인만), `GET /friends/maps`(친구 지도 둘러보기: 친구별 공개 지도 + 내 권한) |
 | 지도 공유(친구) | `GET /maps/{id}/shares`, `PUT/DELETE /maps/{id}/shares/{userId}`(DELETE 는 주인 또는 공유받은 본인), `GET /maps/{id}/members` |
 | 모임 | `POST/GET /groups`, `GET/PATCH/DELETE /groups/{id}`, `DELETE /groups/{id}/members/me`·`/{userId}`, `POST /groups/{id}/members {userId}`(친구 초대), `PUT /groups/{id}/owner`(방장 넘기기), `GET /groups/{id}/maps` |
 | 모임 초대 링크 | `GET/POST/DELETE /groups/{id}/invite`, `GET /groups/invite/{code}`, `POST /groups/invite/{code}/join` |
@@ -172,6 +181,11 @@ presigned URL 직접 업로드 대신 이 방식을 고른 이유: 서버가 파
 
 ### 히트맵 (클라이언트)
 - 추천 결과의 장소마다 카카오 `Circle` 을 그린다. 찍은 사람 수가 많을수록 원이 크고(60~220m), 점수가 높을수록 노랑에서 빨강으로 진해진다. 원은 지도 클릭을 막지 않는다.
+
+### 내 주변 핀 (클라이언트)
+- 내가 볼 수 있는 모든 지도(내 지도 + 공유받은 지도)의 핀을 **내 위치에서 가까운 순**으로 보여 주는 시트. 서버 변경 없이 기존 `GET /overlay/pins` 를 지도 수 상한(20)씩 나눠 불러와 합친다.
+- 내 위치는 시트를 열 때 **한 번만** 확인하고(계속 추적하지 않음) 거리(하버사인)는 폰 안에서만 계산한다. **위치를 서버로 보내지 않는다.**
+- 반경(500m/1km/3km/전체), 상태(가고 싶어요/다녀왔어요), 태그로 거르고, 50개씩 끊어 보여 준다. 항목을 누르면 그 핀의 지도를 열고 상세를 보여 준다.
 
 ## 8. 마일스톤
 
