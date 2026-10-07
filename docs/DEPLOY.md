@@ -26,3 +26,16 @@
 
 ## 5. 롤백
 이전 jar 와 `web/dist` 를 보관해 두었다가 복원 후 재빌드한다. 게이트웨이는 백업한 `nginx.conf` 로 되돌려 reload.
+
+## 자동 배포 (GitHub Actions + 서버의 셀프호스티드 러너)
+
+`main` 에 push 하면 CI(`.github/workflows/ci.yml`)가 프런트(린트·타입·테스트·빌드)와 백엔드(격리된 Postgres/Guard/S3 스택에서 테스트)를 돌린다.
+CI 가 통과한 커밋만 `deploy.yml` 이 서버 러너에서 `scripts/deploy-on-server.sh` 로 배포한다(빌드 → 롤백 스냅샷·DB 백업 → 반영 → 헬스체크 → 실패 시 자동 복구).
+
+서버 최초 준비(한 번만):
+1. 위의 DB·OAuth 클라이언트·게이트웨이 준비를 마친다.
+2. `~/doro-party/` 에 `docker-compose.prod.yml` 과 `.env` 를 둔다(`.env` 에는 `PARTY_*`, `DB_PASSWORD`, `MINIO_ROOT_PASSWORD`, 그리고 웹 빌드용 `VITE_KAKAO_MAP_APP_KEY` 를 넣는다). 배포 스크립트는 이 두 파일을 덮어쓰지 않는다.
+3. 이 저장소에 러너를 등록하고(저장소 설정 → Actions → Runners) 저장소 변수 `CD_ENABLED=true` 를 만든다. 이 변수가 없으면 배포 작업은 건너뛴다.
+4. 사전 점검: `scripts/deploy-on-server.sh --dry-run <party 체크아웃> <Doro 체크아웃>`
+
+로컬에서 CI 와 같은 검증: `scripts/ci-test.sh` (Docker, Java 25, Node 24, 형제 디렉터리 `../Doro` 필요).

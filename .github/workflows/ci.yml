@@ -1,0 +1,57 @@
+name: CI
+
+# main 푸시와 PR 마다 린트·타입·테스트를 돌린다. 배포는 하지 않는다 (배포는 scripts/deploy.sh).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Frontend (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npx tsc -b
+      - run: npm test
+      - run: npm run build
+
+  backend:
+    name: Backend (tests on an isolated Postgres/Redis/Guard/S3 stack)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # build.gradle 의 includeBuild('../Doro') 와 Guard 이미지 빌드를 위해 Doro 레포를 형제 디렉터리로 받는다.
+      - uses: actions/checkout@v4
+        with:
+          path: doro-party
+      - uses: actions/checkout@v4
+        with:
+          repository: yu-teacher/doro
+          path: Doro
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Run backend tests
+        working-directory: doro-party
+        run: scripts/ci-test.sh backend

@@ -1,0 +1,63 @@
+# CI 전용 일회용 스택: 테스트가 필요로 하는 Postgres / Redis / Guard / S3 호환 스토리지를 격리해서 띄운다.
+# 개발·운영 DB 에 접속하지 않는다. scripts/ci-test.sh 가 올리고 내린다 (직접 쓸 때: docker compose -p party-ci -f docker-compose.ci.yml up -d --build).
+# Guard 는 Doro 레포(형제 디렉터리, DORO_DIR)의 소스를 빌드해서 쓴다.
+name: party-ci
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: doro_iam
+      POSTGRES_USER: doro_admin
+      POSTGRES_PASSWORD: ${CI_DB_PASSWORD:-ci-only-password}
+      POSTGRES_MULTIPLE_DATABASES: doro_guard,service_party
+    volumes:
+      - ${DORO_DIR:-../Doro}/init-db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:${CI_DB_PORT:-25432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U doro_admin -d doro_iam"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  guard-api:
+    build:
+      context: ${DORO_DIR:-../Doro}/guard
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/doro_guard
+      SPRING_DATASOURCE_USERNAME: doro_admin
+      SPRING_DATASOURCE_PASSWORD: ${CI_DB_PASSWORD:-ci-only-password}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      PORT: 8081
+      GRPC_PORT: 9090
+      DORO_GUARD_SECURITY_MODE: "OFF"
+      DORO_GUARD_VALIDATION_MODE: WARN
+    ports:
+      - "127.0.0.1:${CI_GUARD_HTTP_PORT:-28081}:8081"
+      - "127.0.0.1:${CI_GUARD_GRPC_PORT:-9090}:9090"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # MinIO 는 공개 컨테이너 이미지 배포를 중단해서(quay.io/minio/minio 401) CI 에서 받을 수 없다.
+  # 대신 S3 호환 목 서버를 쓴다. 인증 없이 객체를 읽을 수 있어 업로드 결과 검증 테스트가 그대로 동작한다.
+  # 로컬 개발·운영은 계속 MinIO 를 쓴다.
+  s3:
+    image: adobe/s3mock:latest
+    environment:
+      initialBuckets: doro-party-test
+    ports:
+      - "127.0.0.1:${CI_MINIO_PORT:-9000}:9090"
