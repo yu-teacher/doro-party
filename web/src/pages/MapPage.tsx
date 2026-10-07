@@ -1,6 +1,7 @@
 import { LocateFixed, MapPinPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Pin } from '../api/types';
+import { useLocation, useNavigate } from 'react-router-dom';
+import type { Pin, RecommendedPlace } from '../api/types';
 import ClusterSheet from '../components/ClusterSheet';
 import FilterBar from '../components/FilterBar';
 import MapFormSheet from '../components/MapFormSheet';
@@ -11,7 +12,9 @@ import OverlayBar from '../components/OverlayBar';
 import OverlayMapsSheet from '../components/OverlayMapsSheet';
 import PinSheet from '../components/PinSheet';
 import PlacementBar from '../components/PlacementBar';
+import RecommendationsSheet from '../components/RecommendationsSheet';
 import SharedMapSheet from '../components/SharedMapSheet';
+import { toHeatSpots } from '../map/heat';
 import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
@@ -30,6 +33,7 @@ type Sheet =
   | { kind: 'map-share' }
   | { kind: 'shared-info' }
   | { kind: 'overlay-maps' }
+  | { kind: 'recommendations' }
   | { kind: 'cluster'; pins: Pin[] };
 
 const NO_SHEET: Sheet = { kind: 'none' };
@@ -44,6 +48,8 @@ export default function MapPage() {
   const { maps, mapsLoaded, selectedMapId, pins, pinsLoading, error, statusFilter, tagFilter } = useMapStore();
   const { loadMaps, selectMap, setStatusFilter, setTagFilter, reset } = useMapStore.getState();
   const overlay = useOverlayStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sheet, setSheet] = useState<Sheet>(NO_SHEET);
   const [panTo, setPanTo] = useState<(LatLngLiteral & { nonce: number }) | null>(null);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -72,10 +78,20 @@ export default function MapPage() {
     setPlacing(null);
   }, [selectedMapId]);
 
+  // 모임 화면의 "오늘 어디 갈까?" 로 들어오면 겹쳐보기가 켜진 채 추천 목록부터 연다(한 번만)
+  const wantsRecommendations = (location.state as { recommend?: boolean } | null)?.recommend === true;
+  useEffect(() => {
+    if (wantsRecommendations && overlay.active) {
+      setSheet({ kind: 'recommendations' });
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [wantsRecommendations, overlay.active, navigate, location.pathname]);
+
   const overlayActive = overlay.active;
   const visiblePins = useMemo(() => filterPins(pins, statusFilter, tagFilter), [pins, statusFilter, tagFilter]);
   const overlayVisiblePins = useMemo(() => withoutHiddenAuthors(overlay.pins, overlay.hiddenAuthors), [overlay.pins, overlay.hiddenAuthors]);
   const overlayAuthors = useMemo(() => authorsOf(overlay.pins), [overlay.pins]);
+  const heat = useMemo(() => (overlayActive && overlay.heatmap ? toHeatSpots(overlay.recommendations) : null), [overlayActive, overlay.heatmap, overlay.recommendations]);
   const mapNames = useMemo(() => new Map(maps.map((map) => [map.id, map.name])), [maps]);
   const tags = useMemo(() => collectTags(pins), [pins]);
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null;
@@ -101,6 +117,13 @@ export default function MapPage() {
     useOverlayStore.getState().close();
     await selectMap(pin.mapId);
     setSheet({ kind: 'pin', pinId: pin.id });
+  };
+
+  /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
+  const pickRecommendation = (place: RecommendedPlace) => {
+    const ids = new Set(place.pinIds);
+    setPanTo({ lat: place.lat, lng: place.lng, nonce: Date.now() });
+    setSheet({ kind: 'cluster', pins: overlay.pins.filter((pin) => ids.has(pin.id)) });
   };
 
   const onMapClick = useCallback((position: LatLngLiteral) => {
@@ -185,6 +208,7 @@ export default function MapPage() {
         fitKey={fitKey}
         panTo={panTo}
         colorMode={overlayActive ? 'author' : 'status'}
+        heat={heat}
         onMapClick={onMapClick}
         onPinClick={onPinClick}
         onClusterOpen={onClusterOpen}
@@ -201,6 +225,9 @@ export default function MapPage() {
               authors={overlayAuthors}
               hiddenAuthors={overlay.hiddenAuthors}
               onPickMaps={() => setSheet({ kind: 'overlay-maps' })}
+              onOpenRecommendations={() => setSheet({ kind: 'recommendations' })}
+              heatmap={overlay.heatmap}
+              onToggleHeatmap={overlay.toggleHeatmap}
               onToggleAuthor={overlay.toggleAuthor}
               onClose={closeOverlay}
             />
@@ -302,6 +329,20 @@ export default function MapPage() {
             setSheet(NO_SHEET);
             void useOverlayStore.getState().setMaps(ids);
           }}
+          onClose={closeSheet}
+        />
+      )}
+      {sheet.kind === 'recommendations' && (
+        <RecommendationsSheet
+          places={overlay.recommendations}
+          loading={overlay.recsLoading}
+          error={overlay.recsError}
+          minPeople={overlay.minPeople}
+          excludedCount={overlay.hiddenAuthors.length}
+          heatmap={overlay.heatmap}
+          onMinPeople={(value) => void overlay.setMinPeople(value)}
+          onToggleHeatmap={overlay.toggleHeatmap}
+          onPick={pickRecommendation}
           onClose={closeSheet}
         />
       )}

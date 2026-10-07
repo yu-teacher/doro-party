@@ -36,6 +36,24 @@ declare namespace kakao.maps {
     setMap(map: Map | null): void;
   }
 
+  interface CircleOptions {
+    center: LatLng;
+    /** 반지름(미터) */
+    radius: number;
+    strokeWeight?: number;
+    strokeColor?: string;
+    strokeOpacity?: number;
+    fillColor?: string;
+    fillOpacity?: number;
+    map?: Map | null;
+    zIndex?: number;
+  }
+
+  class Circle {
+    constructor(options: CircleOptions);
+    setMap(map: Map | null): void;
+  }
+
   class Size {
     constructor(width: number, height: number);
   }

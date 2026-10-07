@@ -1,4 +1,4 @@
-import { ArrowLeft, Crown, Layers, MapPin, UserMinus } from 'lucide-react';
+import { ArrowLeft, Crown, Layers, MapPin, Sparkles, UserMinus } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as mapsApi from '../api/mapsApi';
@@ -76,6 +76,13 @@ function GroupContent({ groupId }: { groupId: string }) {
     navigate('/');
   };
 
+  /** 이 모임의 지도를 겹치고, 추천 목록("오늘 어디 갈까?")부터 연다. */
+  const recommendForGroup = () => {
+    const ids = (sharedMaps.data ?? []).map((map) => map.id).slice(0, MAX_OVERLAY_MAPS);
+    void useOverlayStore.getState().open(ids);
+    navigate('/', { state: { recommend: true } });
+  };
+
   const openMap = (mapId: string) => {
     writeSelectedMapId(mapId);
     navigate('/');
@@ -146,9 +153,14 @@ function GroupContent({ groupId }: { groupId: string }) {
             <p className="text-sm text-slate-500">아직 공유된 지도가 없어요. 아래에서 내 지도를 공유해 보세요.</p>
           ) : (
             <>
-            <button type="button" onClick={overlayGroupMaps} className="flex items-center justify-center gap-2 rounded-xl bg-teal-500 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-400">
-              <Layers size={16} /> 이 모임의 지도 한 화면에 겹쳐보기
-            </button>
+            <div className="flex gap-2">
+              <button type="button" onClick={recommendForGroup} className="flex flex-[3] items-center justify-center gap-2 rounded-xl bg-teal-500 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-400">
+                <Sparkles size={16} /> 오늘 어디 갈까?
+              </button>
+              <button type="button" onClick={overlayGroupMaps} className="flex flex-[2] items-center justify-center gap-2 rounded-xl border border-slate-600 py-3 text-sm font-semibold text-slate-200 hover:bg-slate-800">
+                <Layers size={16} /> 겹쳐보기
+              </button>
+            </div>
             <ul className="flex flex-col gap-2">
               {(sharedMaps.data ?? []).map((map) => (
                 <li key={map.id} className={`${CARD} flex items-center justify-between gap-2`}>

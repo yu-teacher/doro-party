@@ -3,6 +3,8 @@ import type { Ref } from 'react';
 import type { Pin } from '../api/types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_LEVEL, KAKAO_MAP_APP_KEY } from '../config';
 import { clusterPoints } from '../utils/cluster';
+import { heatStyle } from './heat';
+import type { HeatSpot } from './heat';
 import { loadKakaoMaps } from './loadKakaoMaps';
 import { DRAFT_COLOR, markerIcon, pinColor, safeColor } from './markerIcon';
 import type { ColorMode, MarkerIconSpec } from './markerIcon';
@@ -32,6 +34,8 @@ interface Props {
   panTo: (LatLngLiteral & { nonce: number }) | null;
   /** 마커 색: 핀의 상태로 / 핀을 꽂은 사람으로(겹쳐보기). 겹쳐보기에서는 가고 싶은 곳을 옅게 그린다. */
   colorMode: ColorMode;
+  /** 추천 장소를 점수가 높을수록 진한 붉은 원으로 겹쳐 그린다(히트맵). 없으면 그리지 않는다. */
+  heat: { spots: HeatSpot[]; min: number; max: number } | null;
   onMapClick: (position: LatLngLiteral) => void;
   onPinClick: (pinId: string) => void;
   /** 더 확대해도 풀리지 않는 묶음(같은 장소에 여러 핀)을 눌렀을 때 */
@@ -93,12 +97,13 @@ function buildClusterElement(pins: Pin[], mode: ColorMode, onClick: () => void):
 }
 
 /** 화면 가득 카카오맵을 그리고 핀을 마커로 보여 준다. 가까운 핀은 묶어서 보여 준다. 키가 없거나 SDK 를 못 불러오면 이유를 안내한다. */
-export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, colorMode, onMapClick, onPinClick, onClusterOpen }: Props) {
+export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, colorMode, heat, onMapClick, onPinClick, onClusterOpen }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markersRef = useRef(new Map<string, kakao.maps.Marker>());
   const clusterOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const draftMarkerRef = useRef<kakao.maps.Marker | null>(null);
+  const heatCirclesRef = useRef<kakao.maps.Circle[]>([]);
   const fittedKeyRef = useRef<string | null>(null);
   const handlersRef = useRef({ onMapClick, onPinClick, onClusterOpen });
   /** 이동·확대가 끝날 때마다 불리는 렌더 함수. 최신 props 로 다시 만들어 둔다. */
@@ -155,6 +160,8 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
       markers.clear();
       clusterOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
       clusterOverlaysRef.current = [];
+      heatCirclesRef.current.forEach((circle) => circle.setMap(null));
+      heatCirclesRef.current = [];
       draftMarkerRef.current?.setMap(null);
       draftMarkerRef.current = null;
       mapRef.current = null;
@@ -249,6 +256,32 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
       render();
     }
   }, [status, pins, selectedPinId, colorMode]);
+
+  // 히트맵: 추천 장소마다 점수에 따라 색·진하기·크기가 다른 원. 원은 지도 클릭을 가로막지 않는다.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (status !== 'ready' || !map) {
+      return;
+    }
+    heatCirclesRef.current.forEach((circle) => circle.setMap(null));
+    heatCirclesRef.current = [];
+    if (!heat) {
+      return;
+    }
+    heatCirclesRef.current = heat.spots.map((spot) => {
+      const style = heatStyle(spot, heat.min, heat.max);
+      return new kakao.maps.Circle({
+        center: new kakao.maps.LatLng(spot.lat, spot.lng),
+        radius: style.radius,
+        strokeWeight: 0,
+        strokeOpacity: 0,
+        fillColor: style.color,
+        fillOpacity: style.fillOpacity,
+        map,
+        zIndex: 0,
+      });
+    });
+  }, [status, heat]);
 
   // 작성 중인 위치 표시
   useEffect(() => {

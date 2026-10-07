@@ -11,6 +11,7 @@ import type {
   MapMember,
   PartyMap,
   Pin,
+  RecommendationResult,
   RequestResult,
   ShareRole,
   ShareView,
@@ -197,5 +198,22 @@ export interface OverlayResult {
 /** 고른 지도들의 핀을 한 번에 가져온다. 볼 수 없는 지도는 서버가 조용히 뺀다. */
 export async function getOverlay(mapIds: string[], signal?: AbortSignal): Promise<OverlayResult> {
   const response = await apiClient.get<Envelope<OverlayResult>>('/overlay/pins', { params: { mapIds: mapIds.join(',') }, signal });
+  return response.data.data;
+}
+
+export interface RecommendationOptions {
+  /** 이 사람들의 핀은 빼고 계산한다 */
+  excludeAuthors: string[];
+  /** 이 인원 이상이 찍은 장소만 */
+  minPeople: number;
+}
+
+/** 고른 지도들(내가 볼 수 있는 것만)의 추천 장소. 점수 내역이 함께 온다. */
+export async function getRecommendations(mapIds: string[], options: RecommendationOptions, signal?: AbortSignal): Promise<RecommendationResult> {
+  const params: Record<string, string | number> = { mapIds: mapIds.join(','), minPeople: options.minPeople };
+  if (options.excludeAuthors.length > 0) {
+    params.excludeAuthors = options.excludeAuthors.join(',');
+  }
+  const response = await apiClient.get<Envelope<RecommendationResult>>('/overlay/recommendations', { params, signal });
   return response.data.data;
 }

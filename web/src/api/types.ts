@@ -230,3 +230,53 @@ export interface JoinResult {
   groupId: string;
   groupName: string;
 }
+
+// ---------------------------------------------------------------- 모임 추천
+
+/** 점수가 어떻게 나왔는지의 내역: 항목마다 "몇 명 x 가중치 = 점수" 이고 합이 장소의 점수다 */
+export interface ScoreBreakdown {
+  people: number;
+  peoplePoints: number;
+  wishCount: number;
+  wishPoints: number;
+  visitedCount: number;
+  visitedPoints: number;
+  againCount: number;
+  againPoints: number;
+  onceCount: number;
+  oncePoints: number;
+  ratedCount: number;
+  ratingAverage: number | null;
+  ratingPoints: number;
+}
+
+/** 이 장소에서 한 사람의 입장 */
+export interface PlaceAuthor {
+  userId: string;
+  nickname: string;
+  color: string;
+  status: PinStatus;
+  rating: number | null;
+  revisitIntent: RevisitIntent | null;
+}
+
+export interface RecommendedPlace {
+  rank: number;
+  lat: number;
+  lng: number;
+  name: string;
+  otherNames: string[];
+  people: number;
+  pinCount: number;
+  score: number;
+  breakdown: ScoreBreakdown;
+  authors: PlaceAuthor[];
+  pinIds: string[];
+  mapIds: string[];
+}
+
+export interface RecommendationResult {
+  /** 실제로 추천에 쓴 지도(요청한 것 중 내가 볼 수 있는 것) */
+  mapIds: string[];
+  places: RecommendedPlace[];
+}
