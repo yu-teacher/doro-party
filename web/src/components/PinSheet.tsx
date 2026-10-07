@@ -4,6 +4,7 @@ import type { Pin, RevisitIntent } from '../api/types';
 import { usePinRecords } from '../hooks/usePinRecords';
 import { useAuthStore } from '../store/authStore';
 import { useMapStore } from '../store/mapStore';
+import { canPlacePins } from '../utils/mapRole';
 import { EMPTY_PIN_FORM, formValuesFromPin, toPinInput } from '../utils/pinForm';
 import type { PinFormValues } from '../utils/pinForm';
 import PhotoStrip from './PhotoStrip';
@@ -11,6 +12,7 @@ import PinForm from './PinForm';
 import PrivateNoteBox from './PrivateNoteBox';
 import Sheet from './Sheet';
 import StarRating from './StarRating';
+import UserDot from './UserDot';
 import VisitTimeline from './VisitTimeline';
 
 interface CreateProps {
@@ -54,6 +56,7 @@ function CreatePin({ lat, lng, onCreated, onClose }: CreateProps) {
 function ViewPin({ pin, onClose }: ViewProps) {
   const { editPin, removePin, savePrivateNote, deletePrivateNote } = useMapStore.getState();
   const isMapOwner = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.mine ?? false);
+  const role = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.role);
   const privateNote = useMapStore((state) => state.privateNotes[pin.id]);
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const records = usePinRecords(pin.mapId, pin.id);
@@ -101,6 +104,10 @@ function ViewPin({ pin, onClose }: ViewProps) {
           {pin.rating !== null && <StarRating value={pin.rating} size={16} />}
         </div>
 
+        {pin.createdBy !== currentUserId && (
+          <UserDot nickname={pin.authorNickname} color={pin.authorColor} note="님이 꽂았어요" />
+        )}
+
         <PhotoStrip
           mapId={pin.mapId}
           pinId={pin.id}
@@ -122,6 +129,7 @@ function ViewPin({ pin, onClose }: ViewProps) {
 
         <VisitTimeline
           visits={records.visits}
+          canAdd={canPlacePins(role)}
           canDelete={(visit) => isMapOwner || visit.userId === currentUserId}
           onAdd={records.addVisit}
           onDelete={records.removeVisit}

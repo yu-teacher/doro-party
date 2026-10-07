@@ -3,13 +3,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import FilterBar from '../components/FilterBar';
 import MapFormSheet from '../components/MapFormSheet';
 import MapNotice from '../components/MapNotice';
+import MapShareSheet from '../components/MapShareSheet';
 import MapSwitcher from '../components/MapSwitcher';
 import PinSheet from '../components/PinSheet';
 import PlacementBar from '../components/PlacementBar';
+import SharedMapSheet from '../components/SharedMapSheet';
 import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 import { filterPins, useMapStore } from '../store/mapStore';
+import { canPlacePins } from '../utils/mapRole';
 import { collectTags } from '../utils/tags';
 
 type Sheet =
@@ -17,7 +20,9 @@ type Sheet =
   | { kind: 'new-pin'; lat: number; lng: number }
   | { kind: 'pin'; pinId: string }
   | { kind: 'new-map' }
-  | { kind: 'map-settings' };
+  | { kind: 'map-settings' }
+  | { kind: 'map-share' }
+  | { kind: 'shared-info' };
 
 const NO_SHEET: Sheet = { kind: 'none' };
 const LOCATE_ERRORS: Record<number, string> = {
@@ -60,6 +65,7 @@ export default function MapPage() {
   const visiblePins = useMemo(() => filterPins(pins, statusFilter, tagFilter), [pins, statusFilter, tagFilter]);
   const tags = useMemo(() => collectTags(pins), [pins]);
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null;
+  const canPlace = canPlacePins(selectedMap?.role);
   const openedPin = sheet.kind === 'pin' ? pins.find((pin) => pin.id === sheet.pinId) ?? null : null;
   const closeSheet = useCallback(() => setSheet(NO_SHEET), []);
 
@@ -69,6 +75,11 @@ export default function MapPage() {
     }
     if (useMapStore.getState().selectedMapId === null) {
       setSheet({ kind: 'new-map' });
+      return;
+    }
+    // 보기 전용 지도에서는 핀을 꽂지 않는다(서버도 막지만 헛된 입력 창을 열지 않는다)
+    const state = useMapStore.getState();
+    if (!canPlacePins(state.maps.find((map) => map.id === state.selectedMapId)?.role) && sheetKind.current === 'none') {
       return;
     }
     // 지도를 눌렀을 때: 열려 있는 핀 상세는 닫고, 입력 중인 핀은 내용을 둔 채 위치만 옮기고, 다른 입력 시트는 건드리지 않는다.
@@ -139,7 +150,7 @@ export default function MapPage() {
             selectedMapId={selectedMapId}
             onSelect={(mapId) => void selectMap(mapId)}
             onCreate={() => setSheet({ kind: 'new-map' })}
-            onSettings={() => setSheet({ kind: 'map-settings' })}
+            onSettings={() => setSheet({ kind: selectedMap?.role === 'OWNER' ? 'map-settings' : 'shared-info' })}
           />
           {pins.length > 0 && (
             <FilterBar statusFilter={statusFilter} tagFilter={tagFilter} tags={tags} onStatusChange={setStatusFilter} onTagChange={setTagFilter} />
@@ -164,7 +175,7 @@ export default function MapPage() {
       )}
 
       {isAuthenticated && selectedMap && !pinsLoading && pins.length === 0 && sheet.kind === 'none' && (
-        <MapNotice title="아직 핀이 없어요">지도를 눌러 첫 핀을 꽂아 보세요.</MapNotice>
+        <MapNotice title="아직 핀이 없어요">{canPlace ? '지도를 눌러 첫 핀을 꽂아 보세요.' : '이 지도에는 아직 핀이 없어요.'}</MapNotice>
       )}
 
       {error && (
@@ -183,7 +194,7 @@ export default function MapPage() {
       {placing && sheet.kind === 'none' && <PlacementBar onConfirm={confirmPlacing} onCancel={() => setPlacing(null)} />}
 
       <div className={`absolute right-3 z-10 flex flex-col gap-2 ${placing ? 'bottom-32' : 'bottom-4'}`}>
-        {isAuthenticated && selectedMap && sheet.kind === 'none' && !placing && (
+        {isAuthenticated && canPlace && sheet.kind === 'none' && !placing && (
           <button
             type="button"
             onClick={placeAtCenter}
@@ -208,7 +219,11 @@ export default function MapPage() {
       )}
       {sheet.kind === 'pin' && openedPin && <PinSheet mode="view" pin={openedPin} onClose={closeSheet} />}
       {sheet.kind === 'new-map' && <MapFormSheet map={null} onClose={closeSheet} />}
-      {sheet.kind === 'map-settings' && selectedMap && <MapFormSheet map={selectedMap} onClose={closeSheet} />}
+      {sheet.kind === 'map-settings' && selectedMap && (
+        <MapFormSheet map={selectedMap} onClose={closeSheet} onOpenShare={() => setSheet({ kind: 'map-share' })} />
+      )}
+      {sheet.kind === 'map-share' && selectedMap && <MapShareSheet map={selectedMap} onClose={closeSheet} />}
+      {sheet.kind === 'shared-info' && selectedMap && <SharedMapSheet map={selectedMap} onClose={closeSheet} />}
     </div>
   );
 }

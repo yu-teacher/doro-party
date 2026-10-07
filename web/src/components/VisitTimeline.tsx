@@ -7,6 +7,8 @@ import { formatDay, todayInServiceZone } from '../utils/dates';
 
 interface Props {
   visits: Visit[];
+  /** 방문 기록을 남길 수 있는지(편집 권한이 있을 때) */
+  canAdd: boolean;
   /** 내가 남긴 기록이거나 내가 지도 주인이어야 지울 수 있다 */
   canDelete: (visit: Visit) => boolean;
   onAdd: (visitedOn: string, note: string | null) => Promise<void>;
@@ -14,7 +16,7 @@ interface Props {
 }
 
 /** 이 핀을 다녀온 날짜와 한 줄 후기의 타임라인. */
-export default function VisitTimeline({ visits, canDelete, onAdd, onDelete }: Props) {
+export default function VisitTimeline({ visits, canAdd, canDelete, onAdd, onDelete }: Props) {
   const dateId = useId();
   const noteId = useId();
   const [adding, setAdding] = useState(false);
@@ -57,7 +59,7 @@ export default function VisitTimeline({ visits, canDelete, onAdd, onDelete }: Pr
     <section aria-label="방문 기록">
       <div className="mb-2 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-200">방문 기록 {visits.length > 0 && <span className="text-slate-500">({visits.length})</span>}</h3>
-        {!adding && (
+        {canAdd && !adding && (
           <button type="button" onClick={() => setAdding(true)} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-teal-300 hover:bg-slate-800">
             <Plus size={14} /> 다녀왔어요
           </button>

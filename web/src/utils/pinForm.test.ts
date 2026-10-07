@@ -35,7 +35,7 @@ describe('재방문 의사', () => {
 describe('formValuesFromPin', () => {
   it('핀을 폼 값으로 되돌린다(메모가 없으면 빈 문자열)', () => {
     const pin: Pin = {
-      id: 'p', mapId: 'm', createdBy: 'u', lat: 1, lng: 2, name: '이름', sharedMemo: null,
+      id: 'p', mapId: 'm', createdBy: 'u', authorNickname: '작성자', authorColor: '#17BEBB', lat: 1, lng: 2, name: '이름', sharedMemo: null,
       status: 'VISITED', rating: 4, revisitIntent: 'ONCE', tags: ['a'], visitCount: 0, lastVisitedOn: null, photoCount: 0,
       createdAt: '', updatedAt: '',
     };

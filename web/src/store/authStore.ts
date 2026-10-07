@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import { API_BASE } from '../config';
 import { CSRF_HEADER, CSRF_VALUE } from '../api/csrf';
+import * as socialApi from '../api/socialApi';
 import type { UserProfile } from '../api/types';
 
 /**
@@ -16,6 +17,8 @@ interface AuthState {
   /** 서버에 현재 로그인 상태를 물어 반영한다. 앱 시작 때 한 번 호출한다. */
   loadSession: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** 닉네임·사용자명을 바꾼다. 실패하면(사용 중인 사용자명 등) 서버의 안내 문구로 예외를 던진다. */
+  updateProfile: (nickname: string, username: string) => Promise<void>;
   /** 서버가 401 을 돌려줬다: 세션이 끝난 것이므로 화면 상태를 비로그인으로 맞춘다. */
   markSignedOut: () => void;
 }
@@ -60,5 +63,15 @@ export const useAuthStore = create<AuthState>((set) => ({
     set(SIGNED_OUT);
   },
 
+  updateProfile: async (nickname, username) => {
+    const profile = await socialApi.updateProfile(nickname, username);
+    set({ user: profile });
+  },
+
   markSignedOut: () => set(SIGNED_OUT),
 }));
+
+/** 처음 가입하면 닉네임이 임시 사용자명과 같다. 친구에게 보이는 이름이므로 정하도록 안내한다. */
+export function hasDefaultNickname(user: UserProfile | null): boolean {
+  return user !== null && user.nickname === user.username;
+}

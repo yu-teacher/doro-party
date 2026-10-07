@@ -9,9 +9,11 @@ interface Props {
   /** 있으면 이 지도를 수정하는 시트, 없으면 새 지도를 만드는 시트 */
   map: PartyMap | null;
   onClose: () => void;
+  /** 수정 시트에서 공유 설정으로 넘어간다(지도 주인만) */
+  onOpenShare?: () => void;
 }
 
-export default function MapFormSheet({ map, onClose }: Props) {
+export default function MapFormSheet({ map, onClose, onOpenShare }: Props) {
   const nameId = useId();
   const descriptionId = useId();
   const { createMap, updateMap, removeMap } = useMapStore();
@@ -89,6 +91,12 @@ export default function MapFormSheet({ map, onClose }: Props) {
             {saving ? '저장 중…' : map ? '저장' : '만들기'}
           </button>
         </div>
+
+        {map && onOpenShare && (
+          <button type="button" onClick={onOpenShare} className="rounded-lg border border-slate-600 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800">
+            친구·모임에 공유하기
+          </button>
+        )}
 
         {map && (
           confirmingDelete ? (

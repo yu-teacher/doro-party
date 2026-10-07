@@ -45,3 +45,12 @@ describe('signOut', () => {
     expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });
+
+describe('hasDefaultNickname', () => {
+  it('닉네임이 임시 사용자명과 같으면 정하도록 안내한다', async () => {
+    const { hasDefaultNickname } = await import('./authStore');
+    expect(hasDefaultNickname({ id: 'u', username: 'userabcd1234', nickname: 'userabcd1234', color: '#fff' })).toBe(true);
+    expect(hasDefaultNickname({ id: 'u', username: 'userabcd1234', nickname: '파티왕', color: '#fff' })).toBe(false);
+    expect(hasDefaultNickname(null)).toBe(false);
+  });
+});

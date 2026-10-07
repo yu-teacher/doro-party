@@ -11,12 +11,15 @@ const api = vi.mocked(mapsApi);
 const records = vi.mocked(recordsApi);
 
 function map(id: string, pinCount = 0): PartyMap {
-  return { id, name: `지도 ${id}`, description: null, ownerId: 'u', mine: true, pinCount, createdAt: '', updatedAt: '' };
+  return {
+    id, name: `지도 ${id}`, description: null, ownerId: 'u', ownerNickname: '주인', ownerColor: '#E4572E', mine: true, role: 'OWNER', viaGroups: [],
+    pinCount, createdAt: '', updatedAt: '',
+  };
 }
 
 function pin(id: string, mapId: string, overrides: Partial<Pin> = {}): Pin {
   return {
-    id, mapId, createdBy: 'u', lat: 37.5, lng: 127, name: `핀 ${id}`, sharedMemo: null,
+    id, mapId, createdBy: 'u', authorNickname: '작성자', authorColor: '#17BEBB', lat: 37.5, lng: 127, name: `핀 ${id}`, sharedMemo: null,
     status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0,
     createdAt: '', updatedAt: '', ...overrides,
   };

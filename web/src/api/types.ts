@@ -6,6 +6,20 @@ export interface UserProfile {
   color: string;
 }
 
+/** 다른 사람에게 보여 주는 최소한의 정보(이메일 같은 계정 정보는 없다) */
+export interface UserSummary {
+  id: string;
+  username: string;
+  nickname: string;
+  color: string;
+}
+
+/** 이 지도에서 내 권한: 주인 / 핀을 꽂을 수 있는 편집자 / 보기만 하는 열람자 */
+export type MapRole = 'OWNER' | 'EDITOR' | 'VIEWER';
+
+/** 친구에게 지도를 공유할 때의 권한 */
+export type ShareRole = 'VIEWER' | 'EDITOR';
+
 /** 핀의 상태: 가고 싶은 곳 / 다녀온 곳 */
 export type PinStatus = 'WISH' | 'VISITED';
 
@@ -17,8 +31,13 @@ export interface PartyMap {
   name: string;
   description: string | null;
   ownerId: string;
-  /** 내가 만든 지도인지 */
+  ownerNickname: string;
+  ownerColor: string;
+  /** 내가 만든 지도인지(role 이 OWNER 인지와 같다) */
   mine: boolean;
+  role: MapRole;
+  /** 이 지도를 내가 볼 수 있게 해 준 모임들의 이름(직접 만들었거나 직접 공유받았으면 비어 있다) */
+  viaGroups: string[];
   pinCount: number;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +47,8 @@ export interface Pin {
   id: string;
   mapId: string;
   createdBy: string;
+  authorNickname: string;
+  authorColor: string;
   lat: number;
   lng: number;
   name: string;
@@ -97,9 +118,115 @@ export const LIMITS = {
   tagsPerPin: 10,
   ratingMin: 1,
   ratingMax: 5,
+  nickname: 20,
+  groupName: 30,
+  username: { min: 3, max: 30 },
   visitNote: 500,
   privateNote: 2000,
   /** 사진을 올리기 전에 줄이는 한 변의 최대 길이(px) */
   photoMaxEdge: 1600,
   photosPerPin: 10,
 } as const;
+
+
+// ---------------------------------------------------------------- 친구
+
+export interface FriendView {
+  user: UserSummary;
+  since: string;
+}
+
+/** 받은 요청이면 user 는 보낸 사람, 보낸 요청이면 받는 사람이다 */
+export interface FriendRequestView {
+  id: string;
+  user: UserSummary;
+  requestedAt: string;
+}
+
+export interface FriendsOverview {
+  friends: FriendView[];
+  incoming: FriendRequestView[];
+  outgoing: FriendRequestView[];
+}
+
+export interface RequestResult {
+  status: 'PENDING' | 'ACCEPTED';
+  user: UserSummary;
+}
+
+export interface InviteLink {
+  code: string;
+  expiresAt: string;
+}
+
+export interface FriendInvitePreview {
+  inviter: UserSummary;
+  self: boolean;
+  alreadyFriends: boolean;
+}
+
+// ---------------------------------------------------------------- 지도 공유
+
+export interface ShareView {
+  user: UserSummary;
+  role: ShareRole;
+  sharedAt: string;
+}
+
+/** 이 지도를 같이 보는 사람(주인 + 공유받은 사람). 사용자명은 보이지 않는다 */
+export interface MapMember {
+  userId: string;
+  nickname: string;
+  color: string;
+  role: MapRole;
+}
+
+export interface MapGroupView {
+  groupId: string;
+  groupName: string;
+  sharedAt: string;
+}
+
+// ---------------------------------------------------------------- 모임
+
+export type GroupRole = 'OWNER' | 'MEMBER';
+
+export interface GroupSummary {
+  id: string;
+  name: string;
+  myRole: GroupRole;
+  memberCount: number;
+  mapCount: number;
+  ownerNickname: string;
+  createdAt: string;
+}
+
+export interface GroupMember {
+  userId: string;
+  nickname: string;
+  color: string;
+  role: GroupRole;
+  joinedAt: string;
+}
+
+export interface GroupDetail {
+  id: string;
+  name: string;
+  myRole: GroupRole;
+  members: GroupMember[];
+  mapCount: number;
+  createdAt: string;
+}
+
+export interface GroupInvitePreview {
+  groupName: string;
+  memberCount: number;
+  ownerNickname: string;
+  alreadyMember: boolean;
+  full: boolean;
+}
+
+export interface JoinResult {
+  groupId: string;
+  groupName: string;
+}
