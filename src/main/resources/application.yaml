@@ -119,3 +119,15 @@ party:
     access-key: ${MINIO_ACCESS_KEY:doro_admin}
     secret-key: ${MINIO_SECRET_KEY}
     bucket: ${MINIO_BUCKET:doro-party-media}
+
+  # 모임 추천: 가까운 핀을 한 장소로 묶고 점수를 매긴다(점수 내역을 응답에 그대로 싣는다). 가중치는 환경변수로 조정한다.
+  recommendation:
+    place-radius-meters: ${PARTY_RECO_PLACE_RADIUS_METERS:80}
+    per-person: ${PARTY_RECO_PER_PERSON:10}
+    wish: ${PARTY_RECO_WISH:4}
+    visited: ${PARTY_RECO_VISITED:2}
+    revisit-again: ${PARTY_RECO_REVISIT_AGAIN:6}
+    revisit-once: ${PARTY_RECO_REVISIT_ONCE:-4}
+    rating-per-star: ${PARTY_RECO_RATING_PER_STAR:2}
+    neutral-rating: ${PARTY_RECO_NEUTRAL_RATING:3}
+    max-results: ${PARTY_RECO_MAX_RESULTS:30}
