@@ -1,0 +1,52 @@
+services:
+  party-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doro-party-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8086:8086"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: service_party
+      DB_USER: ${DB_USER:-doro_admin}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      IAM_HOST: auth-api
+      IAM_PORT: 8080
+      GUARD_GRPC_HOST: guard-api
+      GUARD_GRPC_PORT: 9090
+      GUARD_HTTP_HOST: guard-api
+      GUARD_HTTP_PORT: 8081
+      DORO_GUARD_SERVICE_TOKEN: ${DORO_GUARD_SERVICE_TOKEN:-}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-doro_admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must be set in .env}
+      MINIO_BUCKET: doro-party-media
+      MINIO_PUBLIC_URL: /party/media
+      PARTY_OAUTH_CLIENT_ID: ${PARTY_OAUTH_CLIENT_ID:-doro-party}
+      PARTY_OAUTH_AUTHORIZE_URL: ${PARTY_OAUTH_AUTHORIZE_URL:?PARTY_OAUTH_AUTHORIZE_URL must be set in .env}
+      PARTY_OAUTH_REDIRECT_URI: ${PARTY_OAUTH_REDIRECT_URI:?PARTY_OAUTH_REDIRECT_URI must be set in .env}
+      PARTY_SESSION_KEY: ${PARTY_SESSION_KEY:?PARTY_SESSION_KEY must be set in .env}
+    networks:
+      - doro-network
+
+  party-web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: doro-party-web
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3005:80"
+    depends_on:
+      - party-api
+    networks:
+      - doro-network
+
+networks:
+  doro-network:
+    external: true
+    name: doro_doro-network

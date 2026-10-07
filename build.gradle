@@ -1,0 +1,69 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.0'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.doro'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.compilerArgs << '-parameters'
+}
+
+dependencies {
+    // DORO SDK (IAM JWKS Token Auth & Guard Zanzibar ReBAC)
+    implementation 'com.hunnit-beasts:doro-sdk'
+
+    // Spring Boot Starters
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // OpenAPI 3.0 Swagger UI
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.5'
+
+    // MinIO / S3 Object Storage Client
+    implementation 'io.minio:minio:8.5.17'
+
+    // Database & Flyway
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // Test
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    maxHeapSize = '2048m'
+    // 테스트는 로컬 docker 의 개발용 Postgres/MinIO 를 쓴다. 운영 설정에는 기본 비밀번호를 두지 않으므로 테스트에서만 주입한다.
+    environment 'DB_PASSWORD', System.getenv('DB_PASSWORD') ?: 'doro_secret'
+    environment 'MINIO_SECRET_KEY', System.getenv('MINIO_SECRET_KEY') ?: 'doro_secret'
+    // 테스트 전용 세션 암호화 키(운영 키가 아니다)
+    environment 'PARTY_SESSION_KEY', System.getenv('PARTY_SESSION_KEY') ?: 'dGVzdC1vbmx5LWtleS0wMTIzNDU2Nzg5MDEyMzQ1Njc='
+}
+
+jar {
+    enabled = false
+}

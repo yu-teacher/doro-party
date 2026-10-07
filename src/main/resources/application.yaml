@@ -1,0 +1,97 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: doro-party
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:25432}/${DB_NAME:service_party}
+    username: ${DB_USER:doro_admin}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 30000
+      connection-timeout: 20000
+      max-lifetime: 1800000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+        show_sql: false
+        default_batch_fetch_size: 100
+  servlet:
+    multipart:
+      max-file-size: 15MB
+      max-request-size: 15MB
+      # 요청 본문을 컨트롤러가 파일을 꺼낼 때 비로소 읽는다. 그래야 인증 검사(UploadAuthInterceptor)가 먼저 실행되어
+      # 로그인하지 않은 요청이 15MB 를 다 올린 뒤에야 거부되는 일이 없다.
+      resolve-lazily: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    table: party_schema_history
+    locations: classpath:db/migration
+
+doro:
+  iam:
+    jwks-uri: http://${IAM_HOST:localhost}:${IAM_PORT:28080}/.well-known/jwks.json
+    # 도로 파티 BFF 가 받은 OAuth 토큰(cid=도로 파티 클라이언트)만 받아 준다. 다른 클라이언트의 토큰은 거부한다.
+    oauth-client-ids: ${PARTY_OAUTH_CLIENT_ID:doro-party}
+    # 다른 곳에서 로그아웃하면 이 서비스의 세션도 바로 끝난다(IAM 에 닿지 못하면 통과 = fail-open)
+    revocation-check: ${DORO_IAM_REVOCATION_CHECK:ENFORCE}
+  guard:
+    grpc-host: ${GUARD_GRPC_HOST:localhost}
+    grpc-port: ${GUARD_GRPC_PORT:9090}
+    http-url: http://${GUARD_HTTP_HOST:localhost}:${GUARD_HTTP_PORT:28081}
+    http-timeout-ms: ${GUARD_HTTP_TIMEOUT_MS:5000}
+    service-token: ${DORO_GUARD_SERVICE_TOKEN:}
+  storage:
+    minio:
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:doro_admin}
+      secret-key: ${MINIO_SECRET_KEY}
+      bucket: ${MINIO_BUCKET:doro-party-media}
+      public-url: ${MINIO_PUBLIC_URL:/party/media}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      # 의존 서비스 상세(DB/Redis 등)는 인증 없이 노출하지 않는다. 상태(UP/DOWN)만 공개된다.
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    com.doro.party: ${LOG_LEVEL_APP:INFO}
+    com.hunnit_beasts.doro.sdk: ${LOG_LEVEL_SDK:INFO}
+
+# 도로 파티 BFF 로그인 (Doro OAuth). 로그인 화면은 Doro 가 담당하고, 도로 파티는 비밀번호를 다루지 않는다.
+party:
+  auth:
+    client-id: ${PARTY_OAUTH_CLIENT_ID:doro-party}
+    authorize-url: ${PARTY_OAUTH_AUTHORIZE_URL:http://localhost:28080/oauth2/authorize}
+    token-url: ${PARTY_OAUTH_TOKEN_URL:http://${IAM_HOST:localhost}:${IAM_PORT:28080}/oauth2/token}
+    revoke-url: ${PARTY_OAUTH_REVOKE_URL:http://${IAM_HOST:localhost}:${IAM_PORT:28080}/oauth2/revoke}
+    redirect-uri: ${PARTY_OAUTH_REDIRECT_URI:http://localhost:3005/party/api/v1/bff/callback}
+    cookie-secure: ${PARTY_COOKIE_SECURE:true}
+    # 웹이 마운트된 하위 경로. 세션 쿠키 Path 와 로그인 후 이동 경로의 접두사. 게이트웨이가 /party 를 떼고 전달하므로 API 경로는 /api/v1 그대로다.
+    web-base-path: ${PARTY_WEB_BASE_PATH:/party}
+    # DB 에 저장하는 토큰을 암호화하는 키(base64 32바이트). 기본값 없음: openssl rand -base64 32
+    session-encryption-key: ${PARTY_SESSION_KEY}

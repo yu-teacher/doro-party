@@ -1,0 +1,8 @@
+# DORO Party ReBAC Zanzibar Schema
+
+# 지도 단위 공유. owner 는 만든 사람, editor 는 핀을 추가·수정할 수 있고, viewer 는 보기만 한다.
+type party_map {
+  relation owner: user
+  relation editor: owner | user
+  relation viewer: editor | user
+}
