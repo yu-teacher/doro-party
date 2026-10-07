@@ -2,19 +2,13 @@ package com.doro.party.domain.auth;
 
 import com.doro.party.domain.auth.repository.AuthSessionRepository;
 import com.doro.party.domain.auth.repository.LoginAttemptRepository;
-import com.hunnit_beasts.doro.sdk.security.jwks.JwksKeyProvider;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeEach;
+import com.doro.party.support.FakeIam;
+import com.doro.party.support.PartyHttpTestBase;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import jakarta.servlet.http.Cookie;
@@ -33,95 +27,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** BFF 로그인 전체 흐름: PKCE 인가 요청, 콜백, 세션 쿠키, CSRF, 토큰 갱신, 로그아웃. 가짜 IAM 서버와 실제 DB 를 쓴다. */
-@SpringBootTest
-@AutoConfigureMockMvc
-class BffLoginFlowTest {
+class BffLoginFlowTest extends PartyHttpTestBase {
 
-    private static final String SITE = "https://party.test";
-    private static final String COOKIE = "doro_party_session";
-    private static final String CSRF = "X-Party-Csrf";
-
-    private static final FakeIam IAM = startIam();
-
-    private static FakeIam startIam() {
-        try {
-            return new FakeIam();
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry registry) {
-        registry.add("party.auth.authorize-url", () -> "https://doro.test/oauth2/authorize");
-        registry.add("party.auth.token-url", () -> IAM.baseUrl() + "/oauth2/token");
-        registry.add("party.auth.revoke-url", () -> IAM.baseUrl() + "/oauth2/revoke");
-        registry.add("party.auth.redirect-uri", () -> SITE + "/party/api/v1/bff/callback");
-        registry.add("party.auth.web-base-path", () -> "/party");
-        registry.add("party.auth.cookie-secure", () -> "true");
-        registry.add("doro.iam.revocation-check", () -> "OFF");
-    }
-
-    @AfterAll
-    static void stopIam() {
-        IAM.close();
-    }
-
-    @Autowired private MockMvc mockMvc;
-    @Autowired private JwksKeyProvider jwks;
     @Autowired private AuthSessionRepository sessions;
     @Autowired private LoginAttemptRepository attempts;
     @Autowired private JdbcTemplate jdbc;
-
-    @BeforeEach
-    void resetIam() {
-        jwks.registerKey(FakeIam.KID, IAM.publicKey());
-        IAM.rejectRefresh = false;
-        IAM.unavailable = false;
-        IAM.accessTtlSeconds = 900;
-    }
-
-    // ------------------------------------------------------------------ 도우미
-
-    private record StartedLogin(String state, String challenge, String location) {}
-
-    private StartedLogin startLogin(String returnPath) throws Exception {
-        var request = get("/api/v1/bff/login");
-        if (returnPath != null) {
-            request.param("return", returnPath);
-        }
-        MockHttpServletResponse response = mockMvc.perform(request).andExpect(status().isFound()).andReturn().getResponse();
-        String location = response.getHeader("Location");
-        var params = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
-        return new StartedLogin(params.getFirst("state"), params.getFirst("code_challenge"), location);
-    }
-
-    private MockHttpServletResponse callback(String code, String state) throws Exception {
-        return mockMvc.perform(get("/api/v1/bff/callback").param("code", code).param("state", state)).andReturn().getResponse();
-    }
-
-    private String cookieValueOf(MockHttpServletResponse response) {
-        String header = response.getHeader("Set-Cookie");
-        assertThat(header).as("세션 쿠키가 발급되어야 한다").isNotNull().startsWith(COOKIE + "=");
-        return header.substring((COOKIE + "=").length(), header.indexOf(';'));
-    }
-
-    /** 로그인 전체를 수행하고 세션 쿠키 값을 돌려준다. */
-    private String login(UUID userId, String email, String returnPath) throws Exception {
-        StartedLogin started = startLogin(returnPath);
-        String code = IAM.issueCode(userId, email, started.challenge(), "doro-party");
-        MockHttpServletResponse response = callback(code, started.state());
-        assertThat(response.getStatus()).isEqualTo(302);
-        return cookieValueOf(response);
-    }
-
-    private String newEmail() {
-        return "bff-" + UUID.randomUUID().toString().substring(0, 8) + "@doro.local";
-    }
-
-    private Cookie session(String value) {
-        return new Cookie(COOKIE, value);
-    }
 
     // ------------------------------------------------------------------ 로그인 시작
 

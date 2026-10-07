@@ -1,4 +1,4 @@
-package com.doro.party.domain.auth;
+package com.doro.party.support;
 
 import com.sun.net.httpserver.HttpServer;
 import io.jsonwebtoken.Jwts;
@@ -18,9 +18,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** 테스트용 가짜 Doro IAM: /oauth2/token(코드 교환·갱신)과 /oauth2/revoke 만 흉내 낸다. 실제 RS256 JWT 를 발급한다. */
-final class FakeIam implements AutoCloseable {
+public final class FakeIam implements AutoCloseable {
 
-    static final String KID = "fake-iam-kid";
+    public static final String KID = "fake-iam-kid";
 
     private record Grant(UUID userId, String email, UUID sessionId, String challenge, String clientId) {}
 
@@ -29,15 +29,15 @@ final class FakeIam implements AutoCloseable {
     private final Map<String, Grant> codes = new ConcurrentHashMap<>();
     private final Map<String, Grant> refreshTokens = new ConcurrentHashMap<>();
 
-    final AtomicInteger codeExchanges = new AtomicInteger();
-    final AtomicInteger refreshCalls = new AtomicInteger();
-    final AtomicInteger revokeCalls = new AtomicInteger();
-    volatile String lastRevokedToken;
-    volatile boolean rejectRefresh;
-    volatile boolean unavailable;
-    volatile long accessTtlSeconds = 900;
+    public final AtomicInteger codeExchanges = new AtomicInteger();
+    public final AtomicInteger refreshCalls = new AtomicInteger();
+    public final AtomicInteger revokeCalls = new AtomicInteger();
+    public volatile String lastRevokedToken;
+    public volatile boolean rejectRefresh;
+    public volatile boolean unavailable;
+    public volatile long accessTtlSeconds = 900;
 
-    FakeIam() throws Exception {
+    public FakeIam() throws Exception {
         KeyPairGenerator gen = KeyPairGenerator.getInstance("RSA");
         gen.initialize(2048);
         keyPair = gen.generateKeyPair();
@@ -77,16 +77,16 @@ final class FakeIam implements AutoCloseable {
         server.start();
     }
 
-    java.security.PublicKey publicKey() {
+    public java.security.PublicKey publicKey() {
         return keyPair.getPublic();
     }
 
-    String baseUrl() {
+    public String baseUrl() {
         return "http://127.0.0.1:" + server.getAddress().getPort();
     }
 
     /** 사용자가 Doro 에서 로그인해 인가 코드를 받은 상황을 만든다. */
-    String issueCode(UUID userId, String email, String challenge, String clientId) {
+    public String issueCode(UUID userId, String email, String challenge, String clientId) {
         String code = "code-" + UUID.randomUUID();
         codes.put(code, new Grant(userId, email, UUID.randomUUID(), challenge, clientId));
         return code;
@@ -134,7 +134,7 @@ final class FakeIam implements AutoCloseable {
         exchange.close();
     }
 
-    static String s256(String verifier) {
+    public static String s256(String verifier) {
         try {
             return Base64.getUrlEncoder().withoutPadding().encodeToString(
                     MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII)));

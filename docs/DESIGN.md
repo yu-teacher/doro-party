@@ -103,6 +103,8 @@ type party_map {
 - 지도를 모임에 공유하면 멤버별 튜플을 쓴다(초기 방식). 모임 멤버 변경 시 튜플 동기화가 필요하며, Guard가 userset 참조를 지원하면 이후 전환을 검토한다.
 - **겹쳐보기는 내가 `view` 권한을 가진 지도만 대상**으로 한다. 친구라도 공유하지 않은 지도는 보이지 않는다.
 - 친구 해제 시 해제한 쪽이 준 공유 권한은 회수한다(기본 정책, 구현 전 재확인).
+- 핀 수정·삭제는 "내가 꽂은 핀" 또는 "지도 주인"만 할 수 있다(editor 가 남의 핀을 고치지 못하게). 지도 수정·삭제는 owner 만 가능하다.
+- 개수 상한(지도 50/사용자, 핀 2000/지도, 태그 10/핀)은 환경변수로 조정하며, 동시 요청에서도 지켜지도록 사용자·지도 행을 잠근 뒤 센다.
 
 ## 5. API 초안 (`/api/v1`, 공통 응답 봉투)
 
@@ -110,7 +112,7 @@ type party_map {
 |---|---|
 | 세션(BFF) | `GET /bff/login`, `GET /bff/callback`, `POST /bff/logout`, `GET /bff/session` |
 | 지도 | `POST/GET /maps`, `GET/PATCH/DELETE /maps/{id}`, `PUT/DELETE /maps/{id}/shares/{userId}` |
-| 핀 | `POST /maps/{id}/pins`, `GET /maps/{id}/pins`, `PATCH/DELETE /pins/{id}` |
+| 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
 | 기록 | `POST /pins/{id}/visits`, `PUT /pins/{id}/private-note` |
 | 사진 | `POST /pins/{id}/photos/presign`, `POST /pins/{id}/photos`(업로드 완료 확정) |
 | 친구 | `POST /friends/requests`, `POST /friends/requests/{id}/accept`, `GET /friends` |

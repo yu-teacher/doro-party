@@ -2,6 +2,7 @@ package com.doro.party.common.exception;
 
 import com.doro.party.common.response.ApiResponse;
 import com.doro.party.common.web.PageLimits;
+import com.hunnit_beasts.doro.sdk.domain.DoroUserContext;
 import com.hunnit_beasts.doro.sdk.exception.DoroAccessDeniedException;
 import com.hunnit_beasts.doro.sdk.exception.DoroGuardUnavailableException;
 import com.hunnit_beasts.doro.sdk.exception.DoroGuardWriteFailedException;
@@ -37,6 +38,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DoroAccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleDoroAccessDenied(DoroAccessDeniedException e) {
+        // 로그인하지 않은 요청은 권한 부족(403)이 아니라 인증 필요(401)다.
+        if (!DoroUserContext.getCurrentUser().isAuthenticated()) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED.getCode(), ErrorCode.UNAUTHORIZED.getMessage()));
+        }
         log.warn("DORO ReBAC Access Denied: {}", e.getMessage());
         return ResponseEntity
                 .status(HttpStatus.FORBIDDEN)

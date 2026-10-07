@@ -95,3 +95,9 @@ party:
     web-base-path: ${PARTY_WEB_BASE_PATH:/party}
     # DB 에 저장하는 토큰을 암호화하는 키(base64 32바이트). 기본값 없음: openssl rand -base64 32
     session-encryption-key: ${PARTY_SESSION_KEY}
+
+# 사용량 상한(남용 방지). 환경변수로 조정한다.
+  limits:
+    max-maps-per-user: ${PARTY_MAX_MAPS_PER_USER:50}
+    max-pins-per-map: ${PARTY_MAX_PINS_PER_MAP:2000}
+    max-tags-per-pin: ${PARTY_MAX_TAGS_PER_PIN:10}
