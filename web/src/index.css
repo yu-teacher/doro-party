@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #0f172a;
+  color: #f1f5f9;
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* 지도를 끌 때 페이지가 같이 당겨지거나 새로고침되는 것을 막는다 */
+  overscroll-behavior: none;
+}
