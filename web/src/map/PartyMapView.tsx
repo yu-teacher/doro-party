@@ -30,8 +30,11 @@ interface Props {
   draft: LatLngLiteral | null;
   /** 이 값이 바뀌면(그리고 null 이 아니면) 핀이 모두 보이도록 지도를 맞춘다. 핀이 불러와진 뒤의 키를 넘긴다. */
   fitKey: string | null;
-  /** nonce 가 바뀔 때마다 그 위치로 지도를 옮긴다(내 위치 버튼 등). */
-  panTo: (LatLngLiteral & { nonce: number }) | null;
+  /**
+   * nonce 가 바뀔 때마다 그 위치로 지도를 옮긴다(내 위치 버튼 등).
+   * aboveSheet 이면 곧 하단 시트가 아래쪽을 덮으므로, 시트에 가려지지 않는 위쪽 영역의 가운데에 그 위치가 오도록 옮긴다.
+   */
+  panTo: (LatLngLiteral & { nonce: number; aboveSheet?: boolean }) | null;
   /** 마커 색: 핀의 상태로 / 핀을 꽂은 사람으로(겹쳐보기). 겹쳐보기에서는 가고 싶은 곳을 옅게 그린다. */
   colorMode: ColorMode;
   /** 추천 장소를 점수가 높을수록 진한 붉은 원으로 겹쳐 그린다(히트맵). 없으면 그리지 않는다. */
@@ -43,6 +46,10 @@ interface Props {
 }
 
 const SINGLE_PIN_LEVEL = 3;
+/** 하단 시트(Sheet)의 최대 높이 비율(max-h-[65%])과 같다. 시트가 열리면 지도의 아래쪽 이 비율만큼이 가려진다. */
+const SHEET_COVER_RATIO = 0.65;
+/** 지도 위에 떠 있는 컨트롤(지도 선택 바·필터 칩)이 지도 위쪽을 가리는 높이(px). 대략값이다. */
+const FLOATING_CONTROLS_PX = 110;
 /** 화면에서 이 거리(px) 안의 핀은 하나로 묶는다 */
 const CLUSTER_PX = 44;
 /** 묶음 안의 점들이 이 정도(px) 안에 모여 있으면 확대로는 풀리지 않는 같은 장소로 본다 */
@@ -323,9 +330,23 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
 
   useEffect(() => {
     const map = mapRef.current;
-    if (status === 'ready' && map && panTo) {
-      map.panTo(new kakao.maps.LatLng(panTo.lat, panTo.lng));
+    if (status !== 'ready' || !map || !panTo) {
+      return;
     }
+    const target = new kakao.maps.LatLng(panTo.lat, panTo.lng);
+    const element = container.current;
+    if (panTo.aboveSheet && element) {
+      // 위치를 화면 가운데가 아니라 위(떠 있는 컨트롤)와 아래(시트)에 가려지지 않는 영역의 가운데에 놓으려면, 지도의 중심을 그 위치보다 그만큼 아래로 잡는다
+      const projection = map.getProjection();
+      const point = projection.containerPointFromCoords(target);
+      const height = element.clientHeight;
+      const visibleBottom = height * (1 - SHEET_COVER_RATIO);
+      const visibleCenter = visibleBottom > FLOATING_CONTROLS_PX ? (FLOATING_CONTROLS_PX + visibleBottom) / 2 : visibleBottom / 2;
+      const shift = height / 2 - visibleCenter;
+      map.panTo(projection.coordsFromContainerPoint(new kakao.maps.Point(point.x, point.y + shift)));
+      return;
+    }
+    map.panTo(target);
   }, [status, panTo]);
 
   return (

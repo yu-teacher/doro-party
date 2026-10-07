@@ -48,7 +48,7 @@ export default function MapPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<Sheet>(NO_SHEET);
-  const [panTo, setPanTo] = useState<(LatLngLiteral & { nonce: number }) | null>(null);
+  const [panTo, setPanTo] = useState<(LatLngLiteral & { nonce: number; aboveSheet?: boolean }) | null>(null);
   const [locateError, setLocateError] = useState<string | null>(null);
   /** 핀을 꽂으려고 지도에서 고른 위치(아직 입력 시트는 열지 않았다) */
   const [placing, setPlacing] = useState<LatLngLiteral | null>(null);
@@ -118,14 +118,14 @@ export default function MapPage() {
 
   /** 가까운 핀을 누르면 그 핀이 속한 지도를 열고, 지도를 그 핀으로 옮겨 상세를 보여 준다. */
   const pickNearby = (pin: Pin) => {
-    setPanTo({ lat: pin.lat, lng: pin.lng, nonce: Date.now() });
-    void openPinInItsMap(pin);
+    // 다른 지도의 핀이면 지도가 바뀌고 핀이 불러와진 뒤 "그 지도 전체 보기"로 맞춰지므로, 이동은 그 다음에 한다
+    void openPinInItsMap(pin).then(() => setPanTo({ lat: pin.lat, lng: pin.lng, nonce: Date.now(), aboveSheet: true }));
   };
 
   /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
   const pickRecommendation = (place: RecommendedPlace) => {
     const ids = new Set(place.pinIds);
-    setPanTo({ lat: place.lat, lng: place.lng, nonce: Date.now() });
+    setPanTo({ lat: place.lat, lng: place.lng, nonce: Date.now(), aboveSheet: true });
     setSheet({ kind: 'cluster', pins: overlay.pins.filter((pin) => ids.has(pin.id)) });
   };
 

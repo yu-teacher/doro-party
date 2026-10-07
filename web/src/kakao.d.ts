@@ -19,6 +19,7 @@ declare namespace kakao.maps {
   interface Projection {
     /** 지도 좌표를 지도 컨테이너 안의 픽셀 위치로 바꾼다 */
     containerPointFromCoords(latlng: LatLng): Point;
+    coordsFromContainerPoint(point: Point): LatLng;
   }
 
   interface CustomOverlayOptions {
