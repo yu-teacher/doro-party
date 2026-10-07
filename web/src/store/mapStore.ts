@@ -23,6 +23,10 @@ interface MapState {
   /** 내 지도 목록을 불러오고, 마지막으로 보던 지도(없으면 첫 지도)를 연다. */
   loadMaps: () => Promise<void>;
   selectMap: (mapId: string | null) => Promise<void>;
+  /** 내 목록에 없는 지도(친구 지도 둘러보기에서 고른 지도)를 목록에 더하고 연다. 이미 있으면 그냥 연다. */
+  openMap: (map: PartyMap) => Promise<void>;
+  /** 서버가 돌려준 최신 지도 정보(공개 범위 변경 등)를 목록에 반영한다. */
+  applyMap: (map: PartyMap) => void;
   createMap: (input: MapInput) => Promise<PartyMap>;
   updateMap: (mapId: string, input: MapInput) => Promise<void>;
   removeMap: (mapId: string) => Promise<void>;
@@ -79,13 +83,31 @@ function withPinCount(maps: PartyMap[], mapId: string, delta: number): PartyMap[
   return maps.map((map) => (map.id === mapId ? { ...map, pinCount: Math.max(0, map.pinCount + delta) } : map));
 }
 
+/**
+ * 마지막으로 보던 지도가 내 목록에 없으면(친구 지도 둘러보기에서 연 지도) 아직 볼 수 있는지 물어서 이어서 연다.
+ * 더는 볼 수 없거나 지워졌다면 null(첫 지도로 돌아간다).
+ */
+async function recallExternalMap(mapId: string | null, known: ReadonlyArray<PartyMap>): Promise<PartyMap | null> {
+  if (mapId === null || known.some((map) => map.id === mapId)) {
+    return null;
+  }
+  try {
+    return await mapsApi.getMap(mapId);
+  } catch (error) {
+    console.warn('The remembered map is no longer available', error);
+    return null;
+  }
+}
+
 export const useMapStore = create<MapState>((set, get) => ({
   ...INITIAL,
 
   loadMaps: async () => {
     try {
-      const maps = await mapsApi.listMyMaps();
+      const listed = await mapsApi.listMyMaps();
       const remembered = readSelectedMapId();
+      const recalled = await recallExternalMap(remembered, listed);
+      const maps = recalled === null ? listed : [...listed, recalled];
       const selected = maps.find((map) => map.id === remembered)?.id ?? maps[0]?.id ?? null;
       set({ maps, mapsLoaded: true, error: null });
       await get().selectMap(selected);
@@ -118,6 +140,17 @@ export const useMapStore = create<MapState>((set, get) => ({
         set({ pinsLoading: false, error: messageOf(error) });
       }
     }
+  },
+
+  openMap: async (map) => {
+    if (!get().maps.some((known) => known.id === map.id)) {
+      set((state) => ({ maps: [...state.maps, map] }));
+    }
+    await get().selectMap(map.id);
+  },
+
+  applyMap: (map) => {
+    set((state) => ({ maps: state.maps.map((known) => (known.id === map.id ? map : known)) }));
   },
 
   createMap: async (input) => {

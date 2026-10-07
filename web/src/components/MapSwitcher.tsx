@@ -36,7 +36,7 @@ export default function MapSwitcher({ maps, selectedMapId, onSelect, onCreate, o
           const group = maps.filter((map) => mapOrigin(map) === origin);
           return group.length === 0 ? null : (
             <optgroup key={origin} label={ORIGIN_LABEL[origin]}>
-              {group.map((map) => <option key={map.id} value={map.id}>{map.name} ({map.pinCount})</option>)}
+              {group.map((map) => <option key={map.id} value={map.id}>{map.name} ({map.pinCount}){map.role === 'OWNER' && map.friendAccess !== 'NONE' ? ' · 친구 공개' : ''}</option>)}
             </optgroup>
           );
         })}

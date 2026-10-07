@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import type {
   FriendInvitePreview,
+  FriendMapsOverview,
   FriendsOverview,
   GroupDetail,
   GroupInvitePreview,
@@ -198,6 +199,12 @@ export interface OverlayResult {
 /** 고른 지도들의 핀을 한 번에 가져온다. 볼 수 없는 지도는 서버가 조용히 뺀다. */
 export async function getOverlay(mapIds: string[], signal?: AbortSignal): Promise<OverlayResult> {
   const response = await apiClient.get<Envelope<OverlayResult>>('/overlay/pins', { params: { mapIds: mapIds.join(',') }, signal });
+  return response.data.data;
+}
+
+/** 친구들이 친구 전체에게 공개해 둔 지도를 친구별로. 내 권한(role)이 함께 온다. */
+export async function getFriendMaps(signal?: AbortSignal): Promise<FriendMapsOverview> {
+  const response = await apiClient.get<Envelope<FriendMapsOverview>>('/friends/maps', { signal });
   return response.data.data;
 }
 

@@ -4,6 +4,7 @@ import Header from './components/Header';
 import LoginErrorNotice from './components/LoginErrorNotice';
 import TabBar from './components/TabBar';
 import ComingSoonPage from './pages/ComingSoonPage';
+import FriendMapsPage from './pages/FriendMapsPage';
 import FriendsPage from './pages/FriendsPage';
 import GroupPage from './pages/GroupPage';
 import GroupsPage from './pages/GroupsPage';
@@ -21,6 +22,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<MapPage />} />
             <Route path="/friends" element={<FriendsPage />} />
+            <Route path="/friends/maps" element={<FriendMapsPage />} />
             <Route path="/invite/:code" element={<InvitePage />} />
             <Route path="/groups" element={<GroupsPage />} />
             <Route path="/groups/:groupId" element={<GroupPage />} />

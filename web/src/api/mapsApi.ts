@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { MapInput, PartyMap, Pin, PinInput } from './types';
+import type { FriendAccess, MapInput, PartyMap, Pin, PinInput } from './types';
 
 /** 서버의 공통 응답 봉투 { success, data, timestamp } */
 interface Envelope<T> {
@@ -9,6 +9,18 @@ interface Envelope<T> {
 
 export async function listMyMaps(signal?: AbortSignal): Promise<PartyMap[]> {
   const response = await apiClient.get<Envelope<PartyMap[]>>('/maps', { signal });
+  return response.data.data;
+}
+
+/** 지도 하나(내가 볼 수 있는 지도만 온다). */
+export async function getMap(mapId: string, signal?: AbortSignal): Promise<PartyMap> {
+  const response = await apiClient.get<Envelope<PartyMap>>(`/maps/${mapId}`, { signal });
+  return response.data.data;
+}
+
+/** 지도를 친구 전체에게 공개하는 범위를 바꾼다(주인만). */
+export async function setFriendAccess(mapId: string, access: FriendAccess): Promise<PartyMap> {
+  const response = await apiClient.put<Envelope<PartyMap>>(`/maps/${mapId}/friend-access`, { access });
   return response.data.data;
 }
 

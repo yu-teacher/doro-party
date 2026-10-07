@@ -1,8 +1,10 @@
 import { Trash2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import * as mapsApi from '../api/mapsApi';
 import * as socialApi from '../api/socialApi';
-import type { PartyMap, ShareRole } from '../api/types';
+import type { FriendAccess, PartyMap, ShareRole } from '../api/types';
 import { useResource } from '../hooks/useResource';
+import { useMapStore } from '../store/mapStore';
 import Section from './Section';
 import Sheet from './Sheet';
 import UserDot from './UserDot';
@@ -17,7 +19,16 @@ const ROLE_OPTIONS: ReadonlyArray<{ value: ShareRole; label: string }> = [
   { value: 'EDITOR', label: '핀도 꽂기' },
 ];
 
-/** 내 지도를 친구(보기/편집)나 모임(보기)에 공유하고 거둔다. 지도 주인만 열 수 있다. */
+const ACCESS_OPTIONS: ReadonlyArray<{ value: FriendAccess; label: string; hint: string }> = [
+  { value: 'NONE', label: '비공개', hint: '아래에서 고른 친구·모임만 볼 수 있어요.' },
+  { value: 'VIEWER', label: '친구 전체 보기', hint: '지금 친구와 앞으로 생길 친구 모두가 볼 수 있어요. 친구의 “친구 지도 둘러보기”에 나타나요. 친구를 끊으면 자동으로 보이지 않아요.' },
+  { value: 'EDITOR', label: '친구 전체 편집', hint: '친구 모두가 이 지도에 핀을 꽂고 고칠 수 있어요. 지도 삭제와 이름 변경은 나만 할 수 있어요.' },
+];
+
+/**
+ * 내 지도의 공개 범위: 친구 전체에게 한꺼번에 공개(보기/편집)하거나, 특정 친구(보기/편집)·모임(보기)에게만 공유한다.
+ * 지도 주인만 열 수 있다.
+ */
 export default function MapShareSheet({ map, onClose }: Props) {
   const shares = useResource(useCallback((signal: AbortSignal) => socialApi.listShares(map.id, signal), [map.id]));
   const friends = useResource(useCallback((signal: AbortSignal) => socialApi.getFriends(signal), []));
@@ -45,12 +56,50 @@ export default function MapShareSheet({ map, onClose }: Props) {
     }
   };
 
+  const changeAccess = (access: FriendAccess) => {
+    if (access === map.friendAccess) {
+      return;
+    }
+    void run(
+      async () => {
+        const updated = await mapsApi.setFriendAccess(map.id, access);
+        useMapStore.getState().applyMap(updated);
+      },
+      '공개 범위를 바꾸지 못했어요.',
+      () => undefined,
+    );
+  };
+  const currentAccess = ACCESS_OPTIONS.find((option) => option.value === map.friendAccess) ?? ACCESS_OPTIONS[0];
+
   return (
-    <Sheet title={`「${map.name}」 공유`} onClose={onClose}>
+    <Sheet title={`「${map.name}」 공개 범위`} onClose={onClose}>
       <div className="flex flex-col gap-5">
         {error && <p role="alert" className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>}
 
-        <Section title="친구에게 공유" hint="친구에게만 공유할 수 있어요">
+        <Section title="친구 전체에게 공개" hint="한 번에 모든 친구에게 적용돼요">
+          <div role="radiogroup" aria-label="친구 전체 공개 범위" className="grid grid-cols-3 gap-1.5">
+            {ACCESS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={map.friendAccess === option.value}
+                disabled={busy}
+                onClick={() => changeAccess(option.value)}
+                className={`rounded-lg px-2 py-2 text-xs font-semibold ring-1 transition-colors disabled:opacity-60 ${
+                  map.friendAccess === option.value
+                    ? option.value === 'EDITOR' ? 'bg-amber-400 text-slate-950 ring-amber-300' : 'bg-teal-400 text-slate-950 ring-teal-300'
+                    : 'bg-slate-800 text-slate-300 ring-slate-700 hover:bg-slate-700'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <p className={`text-xs ${map.friendAccess === 'EDITOR' ? 'text-amber-300' : 'text-slate-400'}`}>{currentAccess.hint}</p>
+        </Section>
+
+        <Section title="특정 친구에게 공유" hint="한 명씩 고르고 권한을 정해요(친구에게만 공유할 수 있어요)">
           {(shares.data ?? []).length > 0 && (
             <ul className="flex flex-col gap-2">
               {(shares.data ?? []).map((share) => (

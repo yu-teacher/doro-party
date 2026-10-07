@@ -12,7 +12,7 @@ const records = vi.mocked(recordsApi);
 
 function map(id: string, pinCount = 0): PartyMap {
   return {
-    id, name: `지도 ${id}`, description: null, ownerId: 'u', ownerNickname: '주인', ownerColor: '#E4572E', mine: true, role: 'OWNER', viaGroups: [],
+    id, name: `지도 ${id}`, description: null, ownerId: 'u', ownerNickname: '주인', ownerColor: '#E4572E', mine: true, role: 'OWNER', viaGroups: [], friendAccess: 'NONE',
     pinCount, createdAt: '', updatedAt: '',
   };
 }
@@ -38,6 +38,84 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('친구 지도 둘러보기에서 연 지도', () => {
+  const friendMap = (id: string): PartyMap => ({ ...map(id), mine: false, role: 'VIEWER', ownerNickname: '친구', friendAccess: 'VIEWER' });
+
+  it('openMap 은 목록에 없는 지도를 더하고 연다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a')]);
+    api.listPins.mockResolvedValue([pin('p1', 'f')]);
+    await useMapStore.getState().loadMaps();
+
+    await useMapStore.getState().openMap(friendMap('f'));
+
+    expect(useMapStore.getState().maps.map((m) => m.id)).toEqual(['a', 'f']);
+    expect(useMapStore.getState().selectedMapId).toBe('f');
+    expect(api.listPins).toHaveBeenLastCalledWith('f', expect.anything());
+  });
+
+  it('이미 목록에 있는 지도는 다시 더하지 않고 연다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a'), map('b')]);
+    api.listPins.mockResolvedValue([]);
+    await useMapStore.getState().loadMaps();
+
+    await useMapStore.getState().openMap(map('b'));
+
+    expect(useMapStore.getState().maps).toHaveLength(2);
+    expect(useMapStore.getState().selectedMapId).toBe('b');
+  });
+
+  it('새로고침해도 마지막으로 보던 친구 지도를 아직 볼 수 있으면 이어서 연다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a')]);
+    api.getMap.mockResolvedValue(friendMap('f'));
+    api.listPins.mockResolvedValue([]);
+    window.localStorage.setItem('party.selectedMapId', 'f');
+
+    await useMapStore.getState().loadMaps();
+
+    expect(api.getMap).toHaveBeenCalledWith('f');
+    expect(useMapStore.getState().maps.map((m) => m.id)).toEqual(['a', 'f']);
+    expect(useMapStore.getState().selectedMapId).toBe('f');
+  });
+
+  it('마지막으로 보던 지도를 더는 볼 수 없으면(친구를 끊음·공개 해제·삭제) 첫 지도로 돌아간다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a')]);
+    api.getMap.mockRejectedValue(new Error('권한 없음'));
+    api.listPins.mockResolvedValue([]);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    window.localStorage.setItem('party.selectedMapId', 'f');
+
+    await useMapStore.getState().loadMaps();
+
+    expect(useMapStore.getState().maps.map((m) => m.id)).toEqual(['a']);
+    expect(useMapStore.getState().selectedMapId).toBe('a');
+    expect(useMapStore.getState().error).toBeNull();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it('내 목록에 있는 지도를 기억하고 있으면 따로 묻지 않는다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a'), map('b')]);
+    api.listPins.mockResolvedValue([]);
+    window.localStorage.setItem('party.selectedMapId', 'b');
+
+    await useMapStore.getState().loadMaps();
+
+    expect(api.getMap).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyMap', () => {
+  it('서버가 돌려준 지도 정보(공개 범위 등)를 목록에 반영한다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a'), map('b')]);
+    api.listPins.mockResolvedValue([]);
+    await useMapStore.getState().loadMaps();
+
+    useMapStore.getState().applyMap({ ...map('b'), friendAccess: 'EDITOR' });
+
+    expect(useMapStore.getState().maps.find((m) => m.id === 'b')?.friendAccess).toBe('EDITOR');
+    expect(useMapStore.getState().maps.find((m) => m.id === 'a')?.friendAccess).toBe('NONE');
+  });
+});
+
 describe('loadMaps', () => {
   it('마지막으로 보던 지도를 열고, 없으면 첫 지도를 연다', async () => {
     api.listMyMaps.mockResolvedValue([map('a'), map('b')]);
@@ -49,6 +127,9 @@ describe('loadMaps', () => {
     expect(useMapStore.getState().selectedMapId).toBe('b');
     expect(useMapStore.getState().pins).toHaveLength(1);
 
+    // 기억한 지도가 없어졌거나 더는 볼 수 없으면(서버가 거절) 첫 지도를 연다
+    api.getMap.mockRejectedValue(new Error('접근 불가'));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     useMapStore.getState().reset();
     window.localStorage.setItem('party.selectedMapId', 'gone');
     await useMapStore.getState().loadMaps();

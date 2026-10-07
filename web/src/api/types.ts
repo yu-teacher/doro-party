@@ -20,6 +20,9 @@ export type MapRole = 'OWNER' | 'EDITOR' | 'VIEWER';
 /** 친구에게 지도를 공유할 때의 권한 */
 export type ShareRole = 'VIEWER' | 'EDITOR';
 
+/** 지도를 친구 전체에게 공개하는 범위: 공개 안 함 / 보기만 / 핀도 꽂기 */
+export type FriendAccess = 'NONE' | 'VIEWER' | 'EDITOR';
+
 /** 핀의 상태: 가고 싶은 곳 / 다녀온 곳 */
 export type PinStatus = 'WISH' | 'VISITED';
 
@@ -38,6 +41,8 @@ export interface PartyMap {
   role: MapRole;
   /** 이 지도를 내가 볼 수 있게 해 준 모임들의 이름(직접 만들었거나 직접 공유받았으면 비어 있다) */
   viaGroups: string[];
+  /** 이 지도를 친구 전체에게 공개한 범위(NONE 이면 공개하지 않음) */
+  friendAccess: FriendAccess;
   pinCount: number;
   createdAt: string;
   updatedAt: string;
@@ -141,6 +146,16 @@ export interface FriendRequestView {
   id: string;
   user: UserSummary;
   requestedAt: string;
+}
+
+/** 친구 한 명이 친구 전체에게 공개해 둔 지도들 */
+export interface FriendMaps {
+  friend: UserSummary;
+  maps: PartyMap[];
+}
+
+export interface FriendMapsOverview {
+  friends: FriendMaps[];
 }
 
 export interface FriendsOverview {

@@ -1,6 +1,7 @@
-import { Check, Pencil, UserMinus, UserPlus, X } from 'lucide-react';
+import { Check, Map as MapIcon, Pencil, UserMinus, UserPlus, X } from 'lucide-react';
 import { useCallback, useId, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import * as socialApi from '../api/socialApi';
 import type { FriendRequestView, FriendView } from '../api/types';
 import InviteLinkBox from '../components/InviteLinkBox';
@@ -85,6 +86,11 @@ function FriendsContent() {
             친구에게 보일 <strong>닉네임</strong>을 정해 주세요. 지금은 임시 이름이에요.
           </button>
         )}
+
+        <Link to="/friends/maps" className={`${CARD} flex items-center justify-between gap-2 text-sm font-medium text-slate-100 hover:bg-slate-800`}>
+          <span className="flex items-center gap-2"><MapIcon size={16} className="text-teal-300" aria-hidden="true" /> 친구 지도 둘러보기</span>
+          <span className="text-xs font-normal text-slate-500">친구들이 공개한 지도</span>
+        </Link>
 
         <Section title="친구 초대하기" hint="링크를 열면 바로 친구가 돼요">
           <InviteLinkBox

@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import type { Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -9,9 +10,46 @@ const BASE = '/party/';
 const API_TARGET = process.env.VITE_DEV_API_TARGET ?? 'http://localhost:8086';
 const THEME_COLOR = '#0f172a';
 
+const BASE_WITHOUT_SLASH = BASE.replace(/\/+$/, '');
+
+/**
+ * 라우터의 기준 경로가 /party 라서 앱 안에서 홈으로 가면 주소가 "/party"(끝에 / 없음)가 된다.
+ * 운영에서는 게이트웨이가 /party 를 /party/ 로 보내 주지만(deploy/gateway-party.conf), 개발·미리보기 서버에는 그 규칙이 없어서
+ * 이 주소로 새로고침하면 404 안내가 뜬다. 같은 규칙을 맞춰 준다.
+ */
+function redirectBaseWithoutSlash(): Plugin {
+  const redirect = (url: string | undefined): string | null => {
+    if (url === undefined) {
+      return null;
+    }
+    const [path, query] = url.split('?', 2);
+    return path === BASE_WITHOUT_SLASH ? `${BASE}${query === undefined ? '' : `?${query}`}` : null;
+  };
+  const middleware = (req: { url?: string }, res: { statusCode: number; setHeader: (name: string, value: string) => void; end: () => void }, next: () => void) => {
+    const target = redirect(req.url);
+    if (target === null) {
+      next();
+      return;
+    }
+    res.statusCode = 301;
+    res.setHeader('Location', target);
+    res.end();
+  };
+  return {
+    name: 'party-redirect-base-without-slash',
+    configureServer: (server) => {
+      server.middlewares.use(middleware);
+    },
+    configurePreviewServer: (server) => {
+      server.middlewares.use(middleware);
+    },
+  };
+}
+
 export default defineConfig({
   base: BASE,
   plugins: [
+    redirectBaseWithoutSlash(),
     react(),
     tailwindcss(),
     VitePWA({

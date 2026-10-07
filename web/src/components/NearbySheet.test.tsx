@@ -38,7 +38,7 @@ function pin(id: string, partial: Partial<Pin> = {}): Pin {
 }
 
 function map(id: string, name: string): PartyMap {
-  return { id, name, description: null, ownerId: 'u1', ownerNickname: '나', ownerColor: '#14B8A6', mine: true, role: 'OWNER', viaGroups: [], pinCount: 0, createdAt: '', updatedAt: '' };
+  return { id, name, description: null, ownerId: 'u1', ownerNickname: '나', ownerColor: '#14B8A6', mine: true, role: 'OWNER', viaGroups: [], friendAccess: 'NONE', pinCount: 0, createdAt: '', updatedAt: '' };
 }
 
 const MAPS = [map('m1', '맛집'), map('m2', '친구 지도')];
