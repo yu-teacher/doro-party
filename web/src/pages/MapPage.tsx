@@ -1,4 +1,4 @@
-import { LocateFixed, MapPinPlus } from 'lucide-react';
+import { ListOrdered, LocateFixed, MapPinPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { Pin, RecommendedPlace } from '../api/types';
@@ -11,6 +11,7 @@ import MapSwitcher from '../components/MapSwitcher';
 import OverlayBar from '../components/OverlayBar';
 import OverlayMapsSheet from '../components/OverlayMapsSheet';
 import PinSheet from '../components/PinSheet';
+import NearbySheet from '../components/NearbySheet';
 import PlacementBar from '../components/PlacementBar';
 import RecommendationsSheet from '../components/RecommendationsSheet';
 import SharedMapSheet from '../components/SharedMapSheet';
@@ -20,6 +21,7 @@ import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 import { filterPins, useMapStore } from '../store/mapStore';
 import { readRememberedOverlayMaps, useOverlayStore } from '../store/overlayStore';
+import { LOCATE_TIMEOUT_MS, LOCATE_UNSUPPORTED, locateErrorMessage } from '../utils/geolocation';
 import { canPlacePins } from '../utils/mapRole';
 import { authorsOf, defaultOverlayMapIds, withoutHiddenAuthors } from '../utils/overlaySelection';
 import { collectTags } from '../utils/tags';
@@ -34,15 +36,10 @@ type Sheet =
   | { kind: 'shared-info' }
   | { kind: 'overlay-maps' }
   | { kind: 'recommendations' }
-  | { kind: 'cluster'; pins: Pin[] };
+  | { kind: 'cluster'; pins: Pin[] }
+  | { kind: 'nearby' };
 
 const NO_SHEET: Sheet = { kind: 'none' };
-const LOCATE_ERRORS: Record<number, string> = {
-  1: '위치 권한이 꺼져 있어요. 브라우저 설정에서 허용해 주세요.',
-  2: '현재 위치를 알 수 없어요.',
-  3: '위치를 확인하는 데 시간이 너무 오래 걸려요.',
-};
-
 export default function MapPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { maps, mapsLoaded, selectedMapId, pins, pinsLoading, error, statusFilter, tagFilter } = useMapStore();
@@ -119,6 +116,12 @@ export default function MapPage() {
     setSheet({ kind: 'pin', pinId: pin.id });
   };
 
+  /** 가까운 핀을 누르면 그 핀이 속한 지도를 열고, 지도를 그 핀으로 옮겨 상세를 보여 준다. */
+  const pickNearby = (pin: Pin) => {
+    setPanTo({ lat: pin.lat, lng: pin.lng, nonce: Date.now() });
+    void openPinInItsMap(pin);
+  };
+
   /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
   const pickRecommendation = (place: RecommendedPlace) => {
     const ids = new Set(place.pinIds);
@@ -169,13 +172,13 @@ export default function MapPage() {
   const locate = () => {
     setLocateError(null);
     if (!('geolocation' in navigator)) {
-      setLocateError('이 브라우저는 위치 확인을 지원하지 않아요.');
+      setLocateError(LOCATE_UNSUPPORTED);
       return;
     }
     navigator.geolocation.getCurrentPosition(
       (position) => setPanTo({ lat: position.coords.latitude, lng: position.coords.longitude, nonce: Date.now() }),
-      (failure) => setLocateError(LOCATE_ERRORS[failure.code] ?? '현재 위치를 확인하지 못했어요.'),
-      { enableHighAccuracy: true, timeout: 10_000 },
+      (failure) => setLocateError(locateErrorMessage(failure.code)),
+      { enableHighAccuracy: true, timeout: LOCATE_TIMEOUT_MS },
     );
   };
 
@@ -299,6 +302,19 @@ export default function MapPage() {
             <MapPinPlus size={20} />
           </button>
         )}
+        {isAuthenticated && maps.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              setPlacing(null);
+              setSheet({ kind: 'nearby' });
+            }}
+            className="rounded-full bg-slate-900/95 p-3 text-slate-100 shadow-lg ring-1 ring-slate-700 hover:bg-slate-800"
+            aria-label="내 주변 핀 보기"
+          >
+            <ListOrdered size={20} />
+          </button>
+        )}
         <button
           type="button"
           onClick={locate}
@@ -346,6 +362,7 @@ export default function MapPage() {
           onClose={closeSheet}
         />
       )}
+      {sheet.kind === 'nearby' && <NearbySheet maps={maps} onPick={pickNearby} onClose={closeSheet} />}
       {sheet.kind === 'cluster' && (
         <ClusterSheet pins={sheet.pins} mapNames={mapNames} onPick={(pin) => setSheet({ kind: 'pin', pinId: pin.id })} onClose={closeSheet} />
       )}

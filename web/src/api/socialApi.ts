@@ -201,6 +201,16 @@ export async function getOverlay(mapIds: string[], signal?: AbortSignal): Promis
   return response.data.data;
 }
 
+/** 지도가 상한(한 번에 겹칠 수 있는 지도 수)보다 많아도 나눠서 요청해 합친다. 볼 수 없는 지도는 서버가 조용히 뺀다. */
+export async function getPinsOfMaps(mapIds: string[], chunkSize: number, signal?: AbortSignal): Promise<Pin[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < mapIds.length; i += chunkSize) {
+    chunks.push(mapIds.slice(i, i + chunkSize));
+  }
+  const results = await Promise.all(chunks.map((chunk) => getOverlay(chunk, signal)));
+  return results.flatMap((result) => result.pins);
+}
+
 export interface RecommendationOptions {
   /** 이 사람들의 핀은 빼고 계산한다 */
   excludeAuthors: string[];
