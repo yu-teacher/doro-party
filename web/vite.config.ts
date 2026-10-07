@@ -36,7 +36,7 @@ export default defineConfig({
       workbox: {
         // 앱 셸(정적 파일)만 캐시한다. 지도·핀 같은 개인 데이터가 담긴 API 와 업로드 사진은 절대 캐시하지 않는다.
         navigateFallback: `${BASE}index.html`,
-        navigateFallbackDenylist: [/^\/party\/api\//, /^\/party\/media\//],
+        navigateFallbackDenylist: [/^\/party\/api\//],
         runtimeCaching: [],
       },
     }),

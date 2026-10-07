@@ -1,6 +1,5 @@
 package com.doro.party.domain.map;
 
-import com.doro.party.infra.guard.GuardTuples;
 import com.doro.party.infra.guard.PartyGuard;
 import com.doro.party.support.PartyHttpTestBase;
 import com.jayway.jsonpath.JsonPath;
@@ -10,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.ResultActions;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import java.util.List;
 import java.util.UUID;
@@ -27,42 +25,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /** 지도·핀 API 를 실제 로그인 세션과 실제 Guard 로 검증한다: 권한, IDOR, 입력 검증, 필터. */
 class MapPinHttpTest extends PartyHttpTestBase {
 
-    @Autowired private GuardTuples guardTuples;
     @Autowired private JdbcTemplate jdbc;
-
-    // ------------------------------------------------------------------ 도우미
-
-    private ResultActions send(TestUser user, MockHttpServletRequestBuilder request) throws Exception {
-        return mockMvc.perform(user.sign(request));
-    }
-
-    private String createMap(TestUser owner, String name) throws Exception {
-        String body = send(owner, post("/api/v1/maps").contentType(MediaType.APPLICATION_JSON)
-                .content("{\"name\":\"" + name + "\",\"description\":\"설명\"}"))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        return JsonPath.read(body, "$.data.id");
-    }
-
-    private static String pinBody(String name, double lat, double lng, String status, Integer rating, String tagsJson) {
-        return "{\"name\":\"" + name + "\",\"sharedMemo\":\"메모\",\"lat\":" + lat + ",\"lng\":" + lng
-                + (status == null ? "" : ",\"status\":\"" + status + "\"")
-                + (rating == null ? "" : ",\"rating\":" + rating)
-                + (tagsJson == null ? "" : ",\"tags\":" + tagsJson) + "}";
-    }
-
-    private String createPin(TestUser user, String mapId, String body) throws Exception {
-        String response = send(user, post("/api/v1/maps/{m}/pins", mapId).contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
-        return JsonPath.read(response, "$.data.id");
-    }
-
-    private ResultActions putPin(TestUser user, String mapId, String pinId, String body) throws Exception {
-        return send(user, put("/api/v1/maps/{m}/pins/{p}", mapId, pinId).contentType(MediaType.APPLICATION_JSON).content(body));
-    }
-
-    private void grant(String mapId, String relation, TestUser user) {
-        guardTuples.write(PartyGuard.MAP, mapId, relation, PartyGuard.USER, user.id().toString());
-    }
 
     private static final String HONGDAE_PIN = pinBody("연남 카페", 37.5625, 126.9246, "VISITED", 4, "[\"카페\"]");
 

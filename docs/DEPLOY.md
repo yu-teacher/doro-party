@@ -4,7 +4,7 @@
 
 ## 1. 사전 준비 (한 번만)
 1. **DB**: 서버 Postgres 에 `CREATE DATABASE service_party;` (`POSTGRES_MULTIPLE_DATABASES` 는 빈 볼륨 최초 기동 때만 처리된다).
-2. **MinIO 버킷**: `doro-party-media` 생성(읽기 전용 익명 접근은 객체 단위만, 목록 조회는 허용하지 않는다).
+2. **MinIO 버킷**: `doro-party-media`. 앱이 첫 사용 때 **비공개**로 만든다(공개 읽기 정책을 걸지 않는다). 사진은 백엔드를 거쳐서만 내려가므로 게이트웨이에 공개 경로가 없다.
 3. **OAuth 클라이언트 등록**: `doro-party`, redirect URI `https://<공개 도메인>/party/api/v1/bff/callback`, 자사 클라이언트(동의 화면 생략). `doro-blog/scripts/setup-bff-server.sh` 와 같은 방식.
 4. **환경변수**: `.env.example` 를 참고해 서버의 `.env` 작성. `PARTY_SESSION_KEY` 는 `openssl rand -base64 32` 로 만들어 비밀번호 관리자에 보관한다(바꾸면 기존 세션이 모두 무효가 된다).
 5. **Guard 서비스 토큰**: 서비스별 토큰 발급(`schema-write` 권한 포함). 공유 토큰을 쓰지 않는다.

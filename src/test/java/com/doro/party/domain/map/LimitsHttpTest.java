@@ -5,6 +5,9 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.TestPropertySource;
 
 import java.util.ArrayList;
@@ -16,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -25,10 +29,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "party.limits.max-maps-per-user=3",
         "party.limits.max-pins-per-map=3",
         "party.limits.max-tags-per-pin=2",
+        "party.limits.max-visits-per-pin=3",
+        "party.limits.max-photos-per-pin=2",
+        "party.limits.max-photo-bytes=2048",
 })
 class LimitsHttpTest extends PartyHttpTestBase {
 
     private static final int PARALLEL_REQUESTS = 12;
+    private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4};
+
+    @Autowired private JdbcTemplate jdbc;
 
     private int statusOf(TestUser user, String url, String body) throws Exception {
         return mockMvc.perform(user.sign(post(url).contentType(MediaType.APPLICATION_JSON).content(body)))
@@ -99,5 +109,59 @@ class LimitsHttpTest extends PartyHttpTestBase {
         mockMvc.perform(user.sign(post("/api/v1/maps/{m}/pins", mapId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"a\",\"lat\":1,\"lng\":1,\"tags\":[\"a\",\"#A\"]}")))
                 .andExpect(status().isOk());
+    }
+
+    private String newPin(TestUser user) throws Exception {
+        String mapId = createMap(user, "상한");
+        return mapId + "/" + createPin(user, mapId, pinBody("핀", 37.5, 127.0, null, null, null));
+    }
+
+    @Test
+    @DisplayName("방문 기록 개수 상한: 동시에 여러 개를 남겨도 상한 이상 저장되지 않는다")
+    void visitLimitHoldsUnderConcurrency() throws Exception {
+        TestUser user = newUser();
+        String[] ids = newPin(user).split("/");
+        String url = "/api/v1/maps/" + ids[0] + "/pins/" + ids[1] + "/visits";
+        List<Callable<Integer>> calls = new ArrayList<>();
+        for (int i = 0; i < PARALLEL_REQUESTS; i++) {
+            calls.add(() -> statusOf(user, url, "{\"visitedOn\":\"" + java.time.LocalDate.now(java.time.ZoneId.of("Asia/Seoul")) + "\"}"));
+        }
+
+        List<Integer> statuses = parallel(calls);
+
+        assertThat(statuses.stream().filter(s -> s == 200).count()).isEqualTo(3);
+        assertThat(statuses.stream().filter(s -> s == 400).count()).isEqualTo(PARALLEL_REQUESTS - 3);
+        assertThat(jdbc.queryForObject("select count(*) from visit_logs where pin_id = ?::uuid", Long.class, ids[1])).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("사진 개수 상한: 동시에 올려도 상한 이상 저장되지 않고, 거절된 사진 파일은 스토리지에 올라가지 않는다")
+    void photoLimitHoldsUnderConcurrency() throws Exception {
+        TestUser user = newUser();
+        String[] ids = newPin(user).split("/");
+        List<Callable<Integer>> calls = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            calls.add(() -> mockMvc.perform(user.sign(multipart("/api/v1/maps/{m}/pins/{p}/photos", ids[0], ids[1])
+                    .file(new MockMultipartFile("file", "a.png", "image/png", PNG)))).andReturn().getResponse().getStatus());
+        }
+
+        List<Integer> statuses = parallel(calls);
+
+        assertThat(statuses.stream().filter(s -> s == 200).count()).isEqualTo(2);
+        assertThat(statuses.stream().filter(s -> s == 400).count()).isEqualTo(4);
+        assertThat(jdbc.queryForObject("select count(*) from pin_photos where pin_id = ?::uuid", Long.class, ids[1])).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("사진 크기 상한을 넘으면 413(UPLOAD-413-01)")
+    void photoSizeLimit() throws Exception {
+        TestUser user = newUser();
+        String[] ids = newPin(user).split("/");
+        byte[] tooBig = new byte[3000];
+        System.arraycopy(PNG, 0, tooBig, 0, PNG.length);
+
+        mockMvc.perform(user.sign(multipart("/api/v1/maps/{m}/pins/{p}/photos", ids[0], ids[1])
+                        .file(new MockMultipartFile("file", "big.png", "image/png", tooBig))))
+                .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("UPLOAD-413-01"));
     }
 }

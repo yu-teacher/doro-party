@@ -7,12 +7,14 @@ import com.doro.party.domain.map.dto.MapDtos.MapRequest;
 import com.doro.party.domain.map.dto.MapDtos.MapResponse;
 import com.doro.party.domain.map.entity.PartyMap;
 import com.doro.party.domain.map.repository.PartyMapRepository;
+import com.doro.party.domain.pin.photo.PinPhotoRepository;
 import com.doro.party.domain.pin.repository.PinRepository;
 import com.doro.party.domain.user.entity.PartyUser;
 import com.doro.party.domain.user.repository.PartyUserRepository;
 import com.doro.party.domain.user.service.PartyUserService;
 import com.doro.party.infra.guard.GuardTuples;
 import com.doro.party.infra.guard.PartyGuard;
+import com.doro.party.infra.storage.StorageCleanup;
 import com.hunnit_beasts.doro.sdk.domain.DoroUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,9 +34,11 @@ public class MapService {
 
     private final PartyMapRepository maps;
     private final PinRepository pins;
+    private final PinPhotoRepository photos;
     private final PartyUserRepository users;
     private final PartyUserService userService;
     private final GuardTuples guardTuples;
+    private final StorageCleanup storageCleanup;
     private final PartyLimits limits;
 
     @Transactional
@@ -88,10 +92,13 @@ public class MapService {
     @Transactional
     public void delete(UUID mapId) {
         PartyMap map = find(mapId);
+        List<String> photoKeys = photos.objectKeysOfMap(mapId);
         maps.delete(map);
+        // 지도와 핀·사진 기록은 DB 가 함께 지운다. 스토리지의 사진 파일은 커밋 뒤에 지운다.
+        storageCleanup.deleteAfterCommit(photoKeys);
         // 커밋이 확정된 뒤에 권한을 지운다. 공유 튜플(editor/viewer)은 공유 기능(M3)에서 함께 정리한다.
         guardTuples.deleteAfterCommit(PartyGuard.MAP, mapId.toString(), PartyGuard.OWNER, PartyGuard.USER, map.getOwnerId().toString());
-        log.info("Map deleted: mapId={}", mapId);
+        log.info("Map deleted: mapId={}, photos={}", mapId, photoKeys.size());
     }
 
     private PartyMap find(UUID mapId) {

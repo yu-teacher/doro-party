@@ -26,10 +26,10 @@ spring:
         default_batch_fetch_size: 100
   servlet:
     multipart:
-      max-file-size: 15MB
-      max-request-size: 15MB
+      max-file-size: 10MB
+      max-request-size: 10MB
       # 요청 본문을 컨트롤러가 파일을 꺼낼 때 비로소 읽는다. 그래야 인증 검사(UploadAuthInterceptor)가 먼저 실행되어
-      # 로그인하지 않은 요청이 15MB 를 다 올린 뒤에야 거부되는 일이 없다.
+      # 로그인하지 않은 요청이 큰 파일을 다 올린 뒤에야 거부되는 일이 없다.
       resolve-lazily: true
   flyway:
     enabled: true
@@ -50,13 +50,6 @@ doro:
     http-url: http://${GUARD_HTTP_HOST:localhost}:${GUARD_HTTP_PORT:28081}
     http-timeout-ms: ${GUARD_HTTP_TIMEOUT_MS:5000}
     service-token: ${DORO_GUARD_SERVICE_TOKEN:}
-  storage:
-    minio:
-      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-      access-key: ${MINIO_ACCESS_KEY:doro_admin}
-      secret-key: ${MINIO_SECRET_KEY}
-      bucket: ${MINIO_BUCKET:doro-party-media}
-      public-url: ${MINIO_PUBLIC_URL:/party/media}
 
 springdoc:
   api-docs:
@@ -101,3 +94,17 @@ party:
     max-maps-per-user: ${PARTY_MAX_MAPS_PER_USER:50}
     max-pins-per-map: ${PARTY_MAX_PINS_PER_MAP:2000}
     max-tags-per-pin: ${PARTY_MAX_TAGS_PER_PIN:10}
+    max-visits-per-pin: ${PARTY_MAX_VISITS_PER_PIN:200}
+    max-photos-per-pin: ${PARTY_MAX_PHOTOS_PER_PIN:10}
+    # 사진 한 장의 최대 크기(바이트). 기본 8MB. 앱에서 올리기 전에 줄여 보내므로 보통은 훨씬 작다.
+    max-photo-bytes: ${PARTY_MAX_PHOTO_BYTES:8388608}
+
+  # "오늘" 을 정하는 서비스 시간대(방문 날짜가 미래인지 판단)
+  timezone: ${PARTY_TIMEZONE:Asia/Seoul}
+
+  # 사진 저장소(MinIO). 버킷은 비공개이고, 사진은 권한을 확인한 백엔드만 내려준다.
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:doro_admin}
+    secret-key: ${MINIO_SECRET_KEY}
+    bucket: ${MINIO_BUCKET:doro-party-media}

@@ -17,6 +17,8 @@ public interface PartyMapRepository extends JpaRepository<PartyMap, UUID> {
 
     long countByOwnerId(UUID ownerId);
 
+    boolean existsByIdAndOwnerId(UUID id, UUID ownerId);
+
     /** 핀 개수 상한 검사처럼 "읽고 판단하고 쓰는" 작업을 같은 지도에 대해 직렬화한다. */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from PartyMap m where m.id = :id")

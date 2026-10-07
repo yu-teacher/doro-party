@@ -62,6 +62,10 @@ public class Pin {
     @Column
     private Integer rating;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "revisit_intent", length = 10)
+    private RevisitIntent revisitIntent;
+
     @ElementCollection
     @CollectionTable(name = "pin_tags", joinColumns = @JoinColumn(name = "pin_id"))
     @Column(name = "tag", nullable = false, length = 30)
@@ -77,7 +81,7 @@ public class Pin {
 
     @Builder
     private Pin(UUID mapId, UUID createdBy, double lat, double lng, String name, String sharedMemo,
-                PinStatus status, Integer rating, Set<String> tags) {
+                PinStatus status, Integer rating, RevisitIntent revisitIntent, Set<String> tags) {
         this.mapId = mapId;
         this.createdBy = createdBy;
         this.lat = lat;
@@ -86,19 +90,26 @@ public class Pin {
         this.sharedMemo = sharedMemo;
         this.status = status;
         this.rating = rating;
+        this.revisitIntent = revisitIntent;
         if (tags != null) {
             this.tags.addAll(tags);
         }
     }
 
-    public void update(double lat, double lng, String name, String sharedMemo, PinStatus status, Integer rating, Set<String> newTags) {
+    public void update(double lat, double lng, String name, String sharedMemo, PinStatus status, Integer rating, RevisitIntent revisitIntent, Set<String> newTags) {
         this.lat = lat;
         this.lng = lng;
         this.name = name;
         this.sharedMemo = sharedMemo;
         this.status = status;
         this.rating = rating;
+        this.revisitIntent = revisitIntent;
         this.tags.retainAll(newTags);
         this.tags.addAll(newTags);
+    }
+
+    /** 방문 기록을 남기면 가고 싶던 곳은 다녀온 곳이 된다. */
+    public void markVisited() {
+        this.status = PinStatus.VISITED;
     }
 }

@@ -1,22 +1,30 @@
 package com.doro.party.support;
 
+import com.doro.party.infra.guard.GuardTuples;
+import com.doro.party.infra.guard.PartyGuard;
 import com.hunnit_beasts.doro.sdk.security.jwks.JwksKeyProvider;
+import com.jayway.jsonpath.JsonPath;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.RequestBuilder;
+import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -54,6 +62,8 @@ public abstract class PartyHttpTestBase {
         registry.add("party.auth.web-base-path", () -> "/party");
         registry.add("party.auth.cookie-secure", () -> "true");
         registry.add("doro.iam.revocation-check", () -> "OFF");
+        // 개발용 버킷과 섞이지 않도록 테스트 전용 버킷을 쓴다
+        registry.add("party.storage.bucket", () -> "doro-party-test");
     }
 
     @Autowired protected MockMvc mockMvc;
@@ -67,11 +77,47 @@ public abstract class PartyHttpTestBase {
         IAM.accessTtlSeconds = 900;
     }
 
+    @Autowired protected GuardTuples guardTuples;
+
+    // ------------------------------------------------------------------ 지도·핀 도우미
+
+    protected ResultActions send(TestUser user, AbstractMockHttpServletRequestBuilder<?> request) throws Exception {
+        return mockMvc.perform(user.sign(request));
+    }
+
+    protected String createMap(TestUser owner, String name) throws Exception {
+        String body = send(owner, post("/api/v1/maps").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + name + "\",\"description\":\"설명\"}"))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(body, "$.data.id");
+    }
+
+    protected static String pinBody(String name, double lat, double lng, String status, Integer rating, String tagsJson) {
+        return "{\"name\":\"" + name + "\",\"sharedMemo\":\"메모\",\"lat\":" + lat + ",\"lng\":" + lng
+                + (status == null ? "" : ",\"status\":\"" + status + "\"")
+                + (rating == null ? "" : ",\"rating\":" + rating)
+                + (tagsJson == null ? "" : ",\"tags\":" + tagsJson) + "}";
+    }
+
+    protected String createPin(TestUser user, String mapId, String body) throws Exception {
+        String response = send(user, post("/api/v1/maps/{m}/pins", mapId).contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        return JsonPath.read(response, "$.data.id");
+    }
+
+    protected ResultActions putPin(TestUser user, String mapId, String pinId, String body) throws Exception {
+        return send(user, put("/api/v1/maps/{m}/pins/{p}", mapId, pinId).contentType(MediaType.APPLICATION_JSON).content(body));
+    }
+
+    protected void grant(String mapId, String relation, TestUser user) {
+        guardTuples.write(PartyGuard.MAP, mapId, relation, PartyGuard.USER, user.id().toString());
+    }
+
     /** 로그인한 테스트 사용자. 세션 쿠키로 요청을 인증한다. */
     public record TestUser(UUID id, String email, String cookie) {
 
         /** 이 사용자로 요청을 보낸다. 상태를 바꾸는 메서드에는 CSRF 증명(헤더·Origin)도 붙인다. */
-        public MockHttpServletRequestBuilder sign(MockHttpServletRequestBuilder request) {
+        public RequestBuilder sign(AbstractMockHttpServletRequestBuilder<?> request) {
             request.cookie(new Cookie(COOKIE, cookie));
             request.header(CSRF, "1");
             request.header("Origin", SITE);

@@ -2,6 +2,7 @@ package com.doro.party.domain.pin.dto;
 
 import com.doro.party.domain.pin.entity.Pin;
 import com.doro.party.domain.pin.entity.PinStatus;
+import com.doro.party.domain.pin.entity.RevisitIntent;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -35,6 +37,7 @@ public final class PinDtos {
             @NotNull @DecimalMin("-180.0") @DecimalMax("180.0") Double lng,
             PinStatus status,
             @Min(RATING_MIN) @Max(RATING_MAX) Integer rating,
+            RevisitIntent revisitIntent,
             @Size(max = TAGS_HARD_MAX) List<@Size(max = TAG_MAX * 2) String> tags
     ) {
     }
@@ -49,14 +52,24 @@ public final class PinDtos {
             String sharedMemo,
             PinStatus status,
             Integer rating,
+            RevisitIntent revisitIntent,
             List<String> tags,
+            long visitCount,
+            LocalDate lastVisitedOn,
+            long photoCount,
             Instant createdAt,
             Instant updatedAt
     ) {
-        public static PinResponse from(Pin pin) {
+        public static PinResponse from(Pin pin, PinStats stats) {
             return new PinResponse(pin.getId(), pin.getMapId(), pin.getCreatedBy(), pin.getLat(), pin.getLng(),
-                    pin.getName(), pin.getSharedMemo(), pin.getStatus(), pin.getRating(),
-                    pin.getTags().stream().sorted().toList(), pin.getCreatedAt(), pin.getUpdatedAt());
+                    pin.getName(), pin.getSharedMemo(), pin.getStatus(), pin.getRating(), pin.getRevisitIntent(),
+                    pin.getTags().stream().sorted().toList(), stats.visitCount(), stats.lastVisitedOn(), stats.photoCount(),
+                    pin.getCreatedAt(), pin.getUpdatedAt());
         }
+    }
+
+    /** 핀에 딸린 기록의 요약(방문 횟수·마지막 방문일·사진 수). */
+    public record PinStats(long visitCount, LocalDate lastVisitedOn, long photoCount) {
+        public static final PinStats EMPTY = new PinStats(0, null, 0);
     }
 }

@@ -29,7 +29,7 @@
 | 겹쳐보기 | 레이어 토글(기본) + 모임 전용 뷰, 작성자 항상 표시, 가까운 핀은 거리 기준 클러스터링 |
 | 추천 | 규칙 기반 점수 + 히트맵 |
 | 인증/인가 | Doro OAuth(BFF 세션 쿠키), 지도 권한은 Guard ReBAC |
-| 사진 | MinIO, presigned URL 직접 업로드 |
+| 사진 | MinIO 비공개 버킷에 저장하고, 권한(Guard)을 확인한 백엔드가 올리고 내려준다 |
 
 ## 2. 아키텍처
 
@@ -59,7 +59,6 @@ flowchart LR
 |---|---|
 | `/party/` | party-web (SPA, `basename="/party"`, Vite `base="/party/"`) |
 | `/party/api/` | party-api (프록시에서 `/party` 제거 후 `/api/v1/...` 로 전달) |
-| `/party/media/` | MinIO `doro-party-media` 버킷(읽기 전용, 목록 조회 차단) |
 
 새 `location` 은 블로그의 `/api/v1/` 보다 먼저 선언한다. 게이트웨이 설정은 CI가 배포하지 않으므로 수동 반영 + `nginx -t` + reload.
 PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 사이트 도메인 등록이 필요하다. CSP에 `dapi.kakao.com`, 타일 도메인 허용을 추가한다.
@@ -70,11 +69,11 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 |---|---|
 | `party_user` | id, doro_user_id(unique), nickname, color |
 | `party_map` | id, owner_id, name, description, created_at |
-| `pin` | id, map_id, created_by, lat, lng, name, shared_memo, status(WISH/VISITED), rating(1..5, null), revisit_intent(AGAIN/ONCE/null), created_at |
-| `pin_private_note` | pin_id, user_id, body — 작성자 본인만 조회 |
-| `pin_tag` | pin_id, tag |
-| `pin_photo` | id, pin_id, object_key, content_type, size_bytes |
-| `visit_log` | id, pin_id, user_id, visited_on, note |
+| `pins` | id, map_id, created_by, lat, lng, name, shared_memo, status(WISH/VISITED), rating(1..5, null), revisit_intent(AGAIN/ONCE/null), created_at |
+| `pin_private_notes` | (pin_id, user_id), body — 쓴 사람 본인에게만 보인다 |
+| `pin_tags` | pin_id, tag |
+| `pin_photos` | id, pin_id, uploaded_by, object_key, content_type(서버가 판별), size_bytes |
+| `visit_logs` | id, pin_id, user_id, visited_on, note |
 | `friendship` | id, requester_id, addressee_id, status(PENDING/ACCEPTED), 양방향 중복 방지 유니크 |
 | `party_group` | id, owner_id, name, persistent(bool) |
 | `party_group_member` | group_id, user_id |
@@ -113,8 +112,9 @@ type party_map {
 | 세션(BFF) | `GET /bff/login`, `GET /bff/callback`, `POST /bff/logout`, `GET /bff/session` |
 | 지도 | `POST/GET /maps`, `GET/PATCH/DELETE /maps/{id}`, `PUT/DELETE /maps/{id}/shares/{userId}` |
 | 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
-| 기록 | `POST /pins/{id}/visits`, `PUT /pins/{id}/private-note` |
-| 사진 | `POST /pins/{id}/photos/presign`, `POST /pins/{id}/photos`(업로드 완료 확정) |
+| 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
+| 사적 메모 | `GET /maps/{id}/private-notes`(내 것 전체), `PUT/DELETE /maps/{id}/pins/{pinId}/private-note` |
+| 사진 | `POST/GET /maps/{id}/pins/{pinId}/photos`(multipart `file`), `GET .../photos/{photoId}/content`, `DELETE .../photos/{photoId}` |
 | 친구 | `POST /friends/requests`, `POST /friends/requests/{id}/accept`, `GET /friends` |
 | 모임 | `POST/GET /groups`, `PUT/DELETE /groups/{id}/members/{userId}` |
 | 겹쳐보기 | `GET /overlay?mapIds=...` (보기 권한이 있는 지도만 반환) |
@@ -122,12 +122,18 @@ type party_map {
 
 목록 파라미터는 `PageLimits` 로 상한을 둔다. 에러는 사전 정의된 코드로 표준 에러 규격을 반환한다.
 
-## 6. 사진 업로드 (MinIO)
+## 6. 사진 (MinIO, 비공개)
 
-1. 클라이언트가 이미지를 리사이즈·압축한다.
-2. `presign` 요청 → 서버가 권한(`edit`)·상한을 검사하고 `party/{mapId}/{pinId}/{uuid}` 키로 presigned PUT URL 발급(짧은 만료, 크기·타입 제한).
-3. 브라우저가 MinIO에 직접 PUT → 서버에 확정 요청 → 서버가 객체 존재·실제 타입(매직 바이트)·크기를 검증하고 DB에 기록.
-4. 확정되지 않은 객체는 주기 정리 작업이 삭제한다.
+위치 기록 사진은 지도의 공유 범위를 따라야 하므로, 버킷을 공개하지 않고 **권한을 확인한 백엔드만** 올리고 내려준다.
+
+1. 앱이 사진을 줄여서(리사이즈·압축) `multipart` 로 올린다. 인증은 파일을 읽기 전에 검사한다(비로그인이 큰 파일을 올리지 못하게).
+2. 서버가 지도 권한(editor)과 핀 규칙(내가 꽂은 핀 또는 지도 주인), 개수·크기 상한을 확인한다.
+3. **형식은 파일의 첫 바이트로 판별**한다(JPEG·PNG·WebP 만). 클라이언트가 보낸 확장자와 Content-Type 은 믿지 않고, SVG·GIF·HTML 은 받지 않는다.
+4. 파일을 먼저 스토리지에 올리고 DB 에 기록한다. DB 가 롤백되면 올린 파일을 지워 고아 파일이 남지 않게 한다.
+5. 내려줄 때는 지도 보기 권한(viewer)을 확인한 뒤 `private` 캐시, `nosniff` 헤더와 함께 스트리밍한다. 공개 URL 이 없다.
+6. 핀·지도·사진을 지우면 DB 삭제가 커밋된 뒤에 스토리지 파일을 지운다(실패하면 ERROR 로그로 남긴다).
+
+presigned URL 직접 업로드 대신 이 방식을 고른 이유: 서버가 파일 내용을 직접 검증할 수 있고, 확정되지 않은 업로드 객체를 정리하는 작업과 게이트웨이 서명 문제가 없으며, 친구들과 쓰는 규모에서는 서버 경유 비용이 무시할 만하다.
 
 ## 7. 클러스터링과 추천
 
@@ -158,6 +164,6 @@ M4까지가 "쓸 만한 서비스"의 기준선이다. 각 단계는 테스트 �
 
 ## 9. 환경변수 (예시)
 
-`DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media/PUBLIC_URL=/party/media`, `PARTY_OAUTH_CLIENT_ID=doro-party`, `PARTY_OAUTH_REDIRECT_URI`, `PARTY_SESSION_KEY`(base64 32바이트, 기본값 없음), `PARTY_COOKIE_SECURE`, 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
+`DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media`, `PARTY_OAUTH_CLIENT_ID=doro-party`, `PARTY_OAUTH_REDIRECT_URI`, `PARTY_SESSION_KEY`(base64 32바이트, 기본값 없음), `PARTY_COOKIE_SECURE`, 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
 
 포트: party-api `8086`, party-web `3005`(Doro·blog·menu·sebi-wht·로컬의 다른 컨테이너가 쓰는 8080~8085, 8090, 3000~3004 와 겹치지 않음).
