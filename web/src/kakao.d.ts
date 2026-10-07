@@ -16,12 +16,34 @@ declare namespace kakao.maps {
     extend(latlng: LatLng): void;
   }
 
+  interface Projection {
+    /** 지도 좌표를 지도 컨테이너 안의 픽셀 위치로 바꾼다 */
+    containerPointFromCoords(latlng: LatLng): Point;
+  }
+
+  interface CustomOverlayOptions {
+    position: LatLng;
+    content: HTMLElement;
+    map?: Map | null;
+    xAnchor?: number;
+    yAnchor?: number;
+    zIndex?: number;
+    clickable?: boolean;
+  }
+
+  class CustomOverlay {
+    constructor(options: CustomOverlayOptions);
+    setMap(map: Map | null): void;
+  }
+
   class Size {
     constructor(width: number, height: number);
   }
 
   class Point {
     constructor(x: number, y: number);
+    x: number;
+    y: number;
   }
 
   interface MarkerImageOptions {
@@ -60,7 +82,8 @@ declare namespace kakao.maps {
     getCenter(): LatLng;
     setLevel(level: number): void;
     getLevel(): number;
-    setBounds(bounds: LatLngBounds): void;
+    setBounds(bounds: LatLngBounds, paddingTop?: number, paddingRight?: number, paddingBottom?: number, paddingLeft?: number): void;
+    getProjection(): Projection;
     relayout(): void;
   }
 
@@ -70,6 +93,8 @@ declare namespace kakao.maps {
 
   namespace event {
     function addListener(target: Map, type: 'click', handler: (event: MouseEvent) => void): void;
+    /** 이동·확대가 끝났을 때(애니메이션이 끝난 뒤) */
+    function addListener(target: Map, type: 'idle', handler: () => void): void;
     function addListener(target: Marker, type: 'click', handler: () => void): void;
     function removeListener(target: Map, type: 'click', handler: (event: MouseEvent) => void): void;
   }

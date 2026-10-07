@@ -1,4 +1,4 @@
-import { ArrowLeft, Crown, MapPin, UserMinus } from 'lucide-react';
+import { ArrowLeft, Crown, Layers, MapPin, UserMinus } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as mapsApi from '../api/mapsApi';
@@ -11,6 +11,8 @@ import Section from '../components/Section';
 import UserDot from '../components/UserDot';
 import { useResource } from '../hooks/useResource';
 import { useAuthStore } from '../store/authStore';
+import { useOverlayStore } from '../store/overlayStore';
+import { MAX_OVERLAY_MAPS } from '../utils/overlaySelection';
 import { writeSelectedMapId } from '../utils/selectedMapStorage';
 
 const CARD = 'rounded-xl bg-slate-800/60 p-3';
@@ -65,6 +67,13 @@ function GroupContent({ groupId }: { groupId: string }) {
     detail.reload();
     sharedMaps.reload();
     myMaps.reload();
+  };
+
+  /** 이 모임에 공유된 지도를 모두 한 지도에 겹쳐서 보여 준다. */
+  const overlayGroupMaps = () => {
+    const ids = (sharedMaps.data ?? []).map((map) => map.id).slice(0, MAX_OVERLAY_MAPS);
+    void useOverlayStore.getState().open(ids);
+    navigate('/');
   };
 
   const openMap = (mapId: string) => {
@@ -136,6 +145,10 @@ function GroupContent({ groupId }: { groupId: string }) {
           {(sharedMaps.data ?? []).length === 0 ? (
             <p className="text-sm text-slate-500">아직 공유된 지도가 없어요. 아래에서 내 지도를 공유해 보세요.</p>
           ) : (
+            <>
+            <button type="button" onClick={overlayGroupMaps} className="flex items-center justify-center gap-2 rounded-xl bg-teal-500 py-3 text-sm font-semibold text-slate-950 hover:bg-teal-400">
+              <Layers size={16} /> 이 모임의 지도 한 화면에 겹쳐보기
+            </button>
             <ul className="flex flex-col gap-2">
               {(sharedMaps.data ?? []).map((map) => (
                 <li key={map.id} className={`${CARD} flex items-center justify-between gap-2`}>
@@ -147,6 +160,7 @@ function GroupContent({ groupId }: { groupId: string }) {
                 </li>
               ))}
             </ul>
+            </>
           )}
         </Section>
 

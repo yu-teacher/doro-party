@@ -1,10 +1,14 @@
 import { LocateFixed, MapPinPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Pin } from '../api/types';
+import ClusterSheet from '../components/ClusterSheet';
 import FilterBar from '../components/FilterBar';
 import MapFormSheet from '../components/MapFormSheet';
 import MapNotice from '../components/MapNotice';
 import MapShareSheet from '../components/MapShareSheet';
 import MapSwitcher from '../components/MapSwitcher';
+import OverlayBar from '../components/OverlayBar';
+import OverlayMapsSheet from '../components/OverlayMapsSheet';
 import PinSheet from '../components/PinSheet';
 import PlacementBar from '../components/PlacementBar';
 import SharedMapSheet from '../components/SharedMapSheet';
@@ -12,7 +16,9 @@ import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 import { filterPins, useMapStore } from '../store/mapStore';
+import { readRememberedOverlayMaps, useOverlayStore } from '../store/overlayStore';
 import { canPlacePins } from '../utils/mapRole';
+import { authorsOf, defaultOverlayMapIds, withoutHiddenAuthors } from '../utils/overlaySelection';
 import { collectTags } from '../utils/tags';
 
 type Sheet =
@@ -22,7 +28,9 @@ type Sheet =
   | { kind: 'new-map' }
   | { kind: 'map-settings' }
   | { kind: 'map-share' }
-  | { kind: 'shared-info' };
+  | { kind: 'shared-info' }
+  | { kind: 'overlay-maps' }
+  | { kind: 'cluster'; pins: Pin[] };
 
 const NO_SHEET: Sheet = { kind: 'none' };
 const LOCATE_ERRORS: Record<number, string> = {
@@ -35,6 +43,7 @@ export default function MapPage() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { maps, mapsLoaded, selectedMapId, pins, pinsLoading, error, statusFilter, tagFilter } = useMapStore();
   const { loadMaps, selectMap, setStatusFilter, setTagFilter, reset } = useMapStore.getState();
+  const overlay = useOverlayStore();
   const [sheet, setSheet] = useState<Sheet>(NO_SHEET);
   const [panTo, setPanTo] = useState<(LatLngLiteral & { nonce: number }) | null>(null);
   const [locateError, setLocateError] = useState<string | null>(null);
@@ -51,6 +60,7 @@ export default function MapPage() {
       void loadMaps();
     } else {
       reset();
+      useOverlayStore.getState().close();
       setSheet(NO_SHEET);
       setPlacing(null);
     }
@@ -62,15 +72,46 @@ export default function MapPage() {
     setPlacing(null);
   }, [selectedMapId]);
 
+  const overlayActive = overlay.active;
   const visiblePins = useMemo(() => filterPins(pins, statusFilter, tagFilter), [pins, statusFilter, tagFilter]);
+  const overlayVisiblePins = useMemo(() => withoutHiddenAuthors(overlay.pins, overlay.hiddenAuthors), [overlay.pins, overlay.hiddenAuthors]);
+  const overlayAuthors = useMemo(() => authorsOf(overlay.pins), [overlay.pins]);
+  const mapNames = useMemo(() => new Map(maps.map((map) => [map.id, map.name])), [maps]);
   const tags = useMemo(() => collectTags(pins), [pins]);
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null;
-  const canPlace = canPlacePins(selectedMap?.role);
-  const openedPin = sheet.kind === 'pin' ? pins.find((pin) => pin.id === sheet.pinId) ?? null : null;
+  const canPlace = !overlayActive && canPlacePins(selectedMap?.role);
+  const pinSource = overlayActive ? overlay.pins : pins;
+  const openedPin = sheet.kind === 'pin' ? pinSource.find((pin) => pin.id === sheet.pinId) ?? null : null;
   const closeSheet = useCallback(() => setSheet(NO_SHEET), []);
+
+  const openOverlay = () => {
+    const ids = defaultOverlayMapIds(maps.map((map) => map.id), readRememberedOverlayMaps());
+    setSheet(NO_SHEET);
+    setPlacing(null);
+    void useOverlayStore.getState().open(ids);
+  };
+
+  const closeOverlay = () => {
+    useOverlayStore.getState().close();
+    setSheet(NO_SHEET);
+  };
+
+  /** 겹쳐보기에서 본 핀을 고치려면 그 핀이 속한 지도를 열어 거기서 한다. */
+  const openPinInItsMap = async (pin: Pin) => {
+    useOverlayStore.getState().close();
+    await selectMap(pin.mapId);
+    setSheet({ kind: 'pin', pinId: pin.id });
+  };
 
   const onMapClick = useCallback((position: LatLngLiteral) => {
     if (!useAuthStore.getState().isAuthenticated) {
+      return;
+    }
+    if (useOverlayStore.getState().active) {
+      // 겹쳐보기에서는 핀을 꽂지 않는다. 열려 있는 핀·묶음 목록만 닫는다.
+      if (sheetKind.current === 'pin' || sheetKind.current === 'cluster') {
+        setSheet(NO_SHEET);
+      }
       return;
     }
     if (useMapStore.getState().selectedMapId === null) {
@@ -100,6 +141,7 @@ export default function MapPage() {
   }, []);
 
   const onPinClick = useCallback((pinId: string) => setSheet({ kind: 'pin', pinId }), []);
+  const onClusterOpen = useCallback((clusterPins: Pin[]) => setSheet({ kind: 'cluster', pins: clusterPins }), []);
 
   const locate = () => {
     setLocateError(null);
@@ -130,30 +172,52 @@ export default function MapPage() {
     }
   };
 
+  const mapPins = !isAuthenticated ? [] : overlayActive ? overlayVisiblePins : visiblePins;
+  const fitKey = !isAuthenticated ? null : overlayActive ? (overlay.loading ? null : `overlay:${overlay.loadCount}`) : pinsLoading ? null : selectedMapId;
+
   return (
     <div className="relative h-full overflow-hidden">
       <PartyMapView
         ref={mapView}
-        pins={isAuthenticated ? visiblePins : []}
+        pins={mapPins}
         selectedPinId={sheet.kind === 'pin' ? sheet.pinId : null}
-        draft={draft}
-        fitKey={isAuthenticated && !pinsLoading ? selectedMapId : null}
+        draft={overlayActive ? null : draft}
+        fitKey={fitKey}
         panTo={panTo}
+        colorMode={overlayActive ? 'author' : 'status'}
         onMapClick={onMapClick}
         onPinClick={onPinClick}
+        onClusterOpen={onClusterOpen}
       />
 
       {isAuthenticated && mapsLoaded && (
         <div className="absolute inset-x-3 top-3 z-10 mx-auto flex max-w-md flex-col gap-2">
-          <MapSwitcher
-            maps={maps}
-            selectedMapId={selectedMapId}
-            onSelect={(mapId) => void selectMap(mapId)}
-            onCreate={() => setSheet({ kind: 'new-map' })}
-            onSettings={() => setSheet({ kind: selectedMap?.role === 'OWNER' ? 'map-settings' : 'shared-info' })}
-          />
-          {pins.length > 0 && (
-            <FilterBar statusFilter={statusFilter} tagFilter={tagFilter} tags={tags} onStatusChange={setStatusFilter} onTagChange={setTagFilter} />
+          {overlayActive ? (
+            <OverlayBar
+              mapCount={overlay.mapIds.length}
+              pinCount={overlayVisiblePins.length}
+              loading={overlay.loading}
+              error={overlay.error}
+              authors={overlayAuthors}
+              hiddenAuthors={overlay.hiddenAuthors}
+              onPickMaps={() => setSheet({ kind: 'overlay-maps' })}
+              onToggleAuthor={overlay.toggleAuthor}
+              onClose={closeOverlay}
+            />
+          ) : (
+            <>
+              <MapSwitcher
+                maps={maps}
+                selectedMapId={selectedMapId}
+                onSelect={(mapId) => void selectMap(mapId)}
+                onCreate={() => setSheet({ kind: 'new-map' })}
+                onSettings={() => setSheet({ kind: selectedMap?.role === 'OWNER' ? 'map-settings' : 'shared-info' })}
+                onOverlay={openOverlay}
+              />
+              {pins.length > 0 && (
+                <FilterBar statusFilter={statusFilter} tagFilter={tagFilter} tags={tags} onStatusChange={setStatusFilter} onTagChange={setTagFilter} />
+              )}
+            </>
           )}
         </div>
       )}
@@ -174,8 +238,12 @@ export default function MapPage() {
         </MapNotice>
       )}
 
-      {isAuthenticated && selectedMap && !pinsLoading && pins.length === 0 && sheet.kind === 'none' && (
+      {isAuthenticated && !overlayActive && selectedMap && !pinsLoading && pins.length === 0 && sheet.kind === 'none' && (
         <MapNotice title="아직 핀이 없어요">{canPlace ? '지도를 눌러 첫 핀을 꽂아 보세요.' : '이 지도에는 아직 핀이 없어요.'}</MapNotice>
+      )}
+
+      {isAuthenticated && overlayActive && !overlay.loading && !overlay.error && overlay.pins.length === 0 && sheet.kind === 'none' && (
+        <MapNotice title="겹칠 핀이 없어요">고른 지도에 아직 핀이 없어요. 위의 지도 고르기에서 다른 지도를 골라 보세요.</MapNotice>
       )}
 
       {error && (
@@ -217,13 +285,29 @@ export default function MapPage() {
       {sheet.kind === 'new-pin' && (
         <PinSheet mode="create" lat={sheet.lat} lng={sheet.lng} onCreated={(pin) => setSheet({ kind: 'pin', pinId: pin.id })} onClose={closeSheet} />
       )}
-      {sheet.kind === 'pin' && openedPin && <PinSheet mode="view" pin={openedPin} onClose={closeSheet} />}
+      {sheet.kind === 'pin' && openedPin && (
+        <PinSheet mode="view" pin={openedPin} onClose={closeSheet} readOnly={overlayActive} onOpenInMap={overlayActive ? (pin) => void openPinInItsMap(pin) : undefined} />
+      )}
       {sheet.kind === 'new-map' && <MapFormSheet map={null} onClose={closeSheet} />}
       {sheet.kind === 'map-settings' && selectedMap && (
         <MapFormSheet map={selectedMap} onClose={closeSheet} onOpenShare={() => setSheet({ kind: 'map-share' })} />
       )}
       {sheet.kind === 'map-share' && selectedMap && <MapShareSheet map={selectedMap} onClose={closeSheet} />}
       {sheet.kind === 'shared-info' && selectedMap && <SharedMapSheet map={selectedMap} onClose={closeSheet} />}
+      {sheet.kind === 'overlay-maps' && (
+        <OverlayMapsSheet
+          maps={maps}
+          selectedIds={overlay.mapIds}
+          onApply={(ids) => {
+            setSheet(NO_SHEET);
+            void useOverlayStore.getState().setMaps(ids);
+          }}
+          onClose={closeSheet}
+        />
+      )}
+      {sheet.kind === 'cluster' && (
+        <ClusterSheet pins={sheet.pins} mapNames={mapNames} onPick={(pin) => setSheet({ kind: 'pin', pinId: pin.id })} onClose={closeSheet} />
+      )}
     </div>
   );
 }

@@ -2,9 +2,10 @@ import { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import type { Ref } from 'react';
 import type { Pin } from '../api/types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_LEVEL, KAKAO_MAP_APP_KEY } from '../config';
+import { clusterPoints } from '../utils/cluster';
 import { loadKakaoMaps } from './loadKakaoMaps';
-import { DRAFT_COLOR, markerIcon, PIN_COLORS } from './markerIcon';
-import type { MarkerIconSpec } from './markerIcon';
+import { DRAFT_COLOR, markerIcon, pinColor, safeColor } from './markerIcon';
+import type { ColorMode, MarkerIconSpec } from './markerIcon';
 
 type Status = 'loading' | 'ready' | 'error' | 'no-key';
 
@@ -25,15 +26,25 @@ interface Props {
   selectedPinId: string | null;
   /** 아직 저장하지 않은, 방금 눌러 놓은 위치 */
   draft: LatLngLiteral | null;
-  /** 이 값이 바뀌면(그리고 null 이 아니면) 핀이 모두 보이도록 지도를 맞춘다. 핀이 불러와진 뒤의 지도 ID 를 넘긴다. */
+  /** 이 값이 바뀌면(그리고 null 이 아니면) 핀이 모두 보이도록 지도를 맞춘다. 핀이 불러와진 뒤의 키를 넘긴다. */
   fitKey: string | null;
   /** nonce 가 바뀔 때마다 그 위치로 지도를 옮긴다(내 위치 버튼 등). */
   panTo: (LatLngLiteral & { nonce: number }) | null;
+  /** 마커 색: 핀의 상태로 / 핀을 꽂은 사람으로(겹쳐보기). 겹쳐보기에서는 가고 싶은 곳을 옅게 그린다. */
+  colorMode: ColorMode;
   onMapClick: (position: LatLngLiteral) => void;
   onPinClick: (pinId: string) => void;
+  /** 더 확대해도 풀리지 않는 묶음(같은 장소에 여러 핀)을 눌렀을 때 */
+  onClusterOpen: (pins: Pin[]) => void;
 }
 
 const SINGLE_PIN_LEVEL = 3;
+/** 화면에서 이 거리(px) 안의 핀은 하나로 묶는다 */
+const CLUSTER_PX = 44;
+/** 묶음 안의 점들이 이 정도(px) 안에 모여 있으면 확대로는 풀리지 않는 같은 장소로 본다 */
+const SAME_PLACE_PX = 3;
+const CLUSTER_SIZE = 44;
+const CLUSTER_RING = 5;
 
 function toImage(icon: MarkerIconSpec): kakao.maps.MarkerImage {
   return new kakao.maps.MarkerImage(icon.url, new kakao.maps.Size(icon.width, icon.height), {
@@ -41,14 +52,57 @@ function toImage(icon: MarkerIconSpec): kakao.maps.MarkerImage {
   });
 }
 
-/** 화면 가득 카카오맵을 그리고 핀을 마커로 보여 준다. 키가 없거나 SDK 를 못 불러오면 이유를 안내한다. */
-export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, onMapClick, onPinClick }: Props) {
+/** 묶음 안 핀들의 색 비율대로 나눈 고리(conic-gradient). 색은 #RRGGBB 로 검증한 값만 스타일에 넣는다. */
+function ringBackground(pins: Pin[], mode: ColorMode): string {
+  const counts = new Map<string, number>();
+  pins.forEach((pin) => {
+    const color = pinColor(pin, mode);
+    counts.set(color, (counts.get(color) ?? 0) + 1);
+  });
+  const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  if (entries.length === 1) {
+    return safeColor(entries[0][0]);
+  }
+  let from = 0;
+  const stops = entries.map(([color, count]) => {
+    const to = from + (count / pins.length) * 100;
+    const stop = `${safeColor(color)} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+    from = to;
+    return stop;
+  });
+  return `conic-gradient(${stops.join(', ')})`;
+}
+
+/** 묶음 마커: 바깥 고리는 그 안에 든 핀의 색(작성자), 가운데는 핀 개수. */
+function buildClusterElement(pins: Pin[], mode: ColorMode, onClick: () => void): HTMLElement {
+  const outer = document.createElement('button');
+  outer.type = 'button';
+  outer.setAttribute('aria-label', `핀 ${pins.length}개 묶음, 누르면 확대해요`);
+  outer.style.cssText = `width:${CLUSTER_SIZE}px;height:${CLUSTER_SIZE}px;padding:${CLUSTER_RING}px;border:0;border-radius:50%;cursor:pointer;`
+    + `background:${ringBackground(pins, mode)};box-shadow:0 2px 6px rgba(0,0,0,.45);`;
+  const inner = document.createElement('span');
+  inner.style.cssText = 'display:flex;align-items:center;justify-content:center;width:100%;height:100%;border-radius:50%;'
+    + 'background:#0F172A;color:#F1F5F9;font:700 14px/1 sans-serif;';
+  inner.textContent = String(pins.length);
+  outer.appendChild(inner);
+  outer.addEventListener('click', (event) => {
+    event.stopPropagation();
+    onClick();
+  });
+  return outer;
+}
+
+/** 화면 가득 카카오맵을 그리고 핀을 마커로 보여 준다. 가까운 핀은 묶어서 보여 준다. 키가 없거나 SDK 를 못 불러오면 이유를 안내한다. */
+export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, colorMode, onMapClick, onPinClick, onClusterOpen }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markersRef = useRef(new Map<string, kakao.maps.Marker>());
+  const clusterOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const draftMarkerRef = useRef<kakao.maps.Marker | null>(null);
   const fittedKeyRef = useRef<string | null>(null);
-  const handlersRef = useRef({ onMapClick, onPinClick });
+  const handlersRef = useRef({ onMapClick, onPinClick, onClusterOpen });
+  /** 이동·확대가 끝날 때마다 불리는 렌더 함수. 최신 props 로 다시 만들어 둔다. */
+  const renderRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<Status>(KAKAO_MAP_APP_KEY ? 'loading' : 'no-key');
   const [message, setMessage] = useState('');
 
@@ -61,7 +115,7 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
 
   // 이벤트 핸들러는 마커가 오래 살아 있어도 항상 최신 콜백을 부르도록 ref 로 들고 있는다.
   useEffect(() => {
-    handlersRef.current = { onMapClick, onPinClick };
+    handlersRef.current = { onMapClick, onPinClick, onClusterOpen };
   });
 
   useEffect(() => {
@@ -82,6 +136,8 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
         kakao.maps.event.addListener(map, 'click', (event) => {
           handlersRef.current.onMapClick({ lat: event.latLng.getLat(), lng: event.latLng.getLng() });
         });
+        // 확대·이동이 끝나면 픽셀 거리가 바뀌므로 묶음을 다시 계산한다
+        kakao.maps.event.addListener(map, 'idle', () => renderRef.current());
         mapRef.current = map;
         setStatus('ready');
       })
@@ -97,43 +153,102 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
       cancelled = true;
       markers.forEach((marker) => marker.setMap(null));
       markers.clear();
+      clusterOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+      clusterOverlaysRef.current = [];
       draftMarkerRef.current?.setMap(null);
       draftMarkerRef.current = null;
       mapRef.current = null;
     };
   }, []);
 
-  // 핀 → 마커 동기화(추가·이동·삭제만 반영하고 나머지는 그대로 둔다)
+  // 핀 → 마커/묶음. 가까운 핀은 묶음으로, 나머지는 마커로. 선택된 핀은 묶음에 들어가지 않고 따로 보인다.
   useEffect(() => {
-    const map = mapRef.current;
-    if (status !== 'ready' || !map) {
-      return;
-    }
-    const markers = markersRef.current;
-    const seen = new Set<string>();
-    for (const pin of pins) {
-      seen.add(pin.id);
-      const selected = pin.id === selectedPinId;
-      const position = new kakao.maps.LatLng(pin.lat, pin.lng);
-      const image = toImage(markerIcon(PIN_COLORS[pin.status], selected));
-      const existing = markers.get(pin.id);
-      if (existing) {
-        existing.setPosition(position);
-        existing.setImage(image);
-        existing.setZIndex(selected ? 2 : 1);
-      } else {
-        const marker = new kakao.maps.Marker({ position, image, map, title: pin.name, zIndex: selected ? 2 : 1 });
-        kakao.maps.event.addListener(marker, 'click', () => handlersRef.current.onPinClick(pin.id));
-        markers.set(pin.id, marker);
+    const render = () => {
+      const map = mapRef.current;
+      if (!map) {
+        return;
       }
-    }
-    markers.forEach((marker, id) => {
-      if (!seen.has(id)) {
-        marker.setMap(null);
-        markers.delete(id);
+      const projection = map.getProjection();
+      const points = pins.map((pin) => {
+        const at = projection.containerPointFromCoords(new kakao.maps.LatLng(pin.lat, pin.lng));
+        return { id: pin.id, x: at.x, y: at.y };
+      });
+      const pointById = new Map(points.map((point) => [point.id, point]));
+      const pinById = new Map(pins.map((pin) => [pin.id, pin]));
+      const clusters = clusterPoints(points, CLUSTER_PX, selectedPinId ? new Set([selectedPinId]) : undefined);
+
+      const singles = new Set<string>();
+      const groups: Pin[][] = [];
+      for (const cluster of clusters) {
+        if (cluster.ids.length === 1) {
+          singles.add(cluster.ids[0]);
+        } else {
+          groups.push(cluster.ids.flatMap((id) => pinById.get(id) ?? []));
+        }
       }
-    });
-  }, [status, pins, selectedPinId]);
+
+      const markers = markersRef.current;
+      for (const id of singles) {
+        const pin = pinById.get(id);
+        if (!pin) {
+          continue;
+        }
+        const selected = id === selectedPinId;
+        const image = toImage(markerIcon(pinColor(pin, colorMode), selected, colorMode === 'author' && pin.status === 'WISH'));
+        const position = new kakao.maps.LatLng(pin.lat, pin.lng);
+        const existing = markers.get(id);
+        if (existing) {
+          existing.setPosition(position);
+          existing.setImage(image);
+          existing.setZIndex(selected ? 2 : 1);
+        } else {
+          const marker = new kakao.maps.Marker({ position, image, map, title: pin.name, zIndex: selected ? 2 : 1 });
+          kakao.maps.event.addListener(marker, 'click', () => handlersRef.current.onPinClick(id));
+          markers.set(id, marker);
+        }
+      }
+      markers.forEach((marker, id) => {
+        if (!singles.has(id)) {
+          marker.setMap(null);
+          markers.delete(id);
+        }
+      });
+
+      clusterOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
+      clusterOverlaysRef.current = groups.map((group) => {
+        const center = new kakao.maps.LatLng(
+          group.reduce((sum, pin) => sum + pin.lat, 0) / group.length,
+          group.reduce((sum, pin) => sum + pin.lng, 0) / group.length,
+        );
+        const onClick = () => {
+          const xs = group.map((pin) => pointById.get(pin.id)?.x ?? 0);
+          const ys = group.map((pin) => pointById.get(pin.id)?.y ?? 0);
+          const extent = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+          if (extent < SAME_PLACE_PX || map.getLevel() <= 1) {
+            // 확대해도 풀리지 않는 같은 장소: 목록으로 보여 준다
+            handlersRef.current.onClusterOpen(group);
+            return;
+          }
+          const bounds = new kakao.maps.LatLngBounds();
+          group.forEach((pin) => bounds.extend(new kakao.maps.LatLng(pin.lat, pin.lng)));
+          map.setBounds(bounds, 90, 60, 90, 60);
+        };
+        return new kakao.maps.CustomOverlay({
+          position: center,
+          content: buildClusterElement(group, colorMode, onClick),
+          map,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 1,
+          clickable: true,
+        });
+      });
+    };
+    renderRef.current = render;
+    if (status === 'ready') {
+      render();
+    }
+  }, [status, pins, selectedPinId, colorMode]);
 
   // 작성 중인 위치 표시
   useEffect(() => {

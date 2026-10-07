@@ -27,6 +27,10 @@ interface ViewProps {
   mode: 'view';
   pin: Pin;
   onClose: () => void;
+  /** 겹쳐보기에서 연 핀: 고치거나 지우거나 기록을 추가하지 않고 보기만 한다(다른 지도의 핀일 수 있다) */
+  readOnly?: boolean;
+  /** readOnly 일 때 이 핀이 속한 지도를 열어 수정할 수 있게 한다 */
+  onOpenInMap?: (pin: Pin) => void;
 }
 
 const STATUS_LABEL = { WISH: '가고 싶어요', VISITED: '다녀왔어요' } as const;
@@ -53,7 +57,7 @@ function CreatePin({ lat, lng, onCreated, onClose }: CreateProps) {
   );
 }
 
-function ViewPin({ pin, onClose }: ViewProps) {
+function ViewPin({ pin, onClose, readOnly = false, onOpenInMap }: ViewProps) {
   const { editPin, removePin, savePrivateNote, deletePrivateNote } = useMapStore.getState();
   const isMapOwner = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.mine ?? false);
   const role = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.role);
@@ -66,7 +70,7 @@ function ViewPin({ pin, onClose }: ViewProps) {
   const [error, setError] = useState<string | null>(null);
 
   // 서버가 최종 판단하지만, 못 할 일은 버튼을 보여 주지 않는다: 내가 꽂은 핀이거나 내가 지도 주인일 때만 고치고 사진을 붙인다
-  const canModifyPin = isMapOwner || pin.createdBy === currentUserId;
+  const canModifyPin = !readOnly && (isMapOwner || pin.createdBy === currentUserId);
 
   const save = async (values: PinFormValues) => {
     await editPin(pin.id, toPinInput(values, pin.lat, pin.lng));
@@ -113,7 +117,7 @@ function ViewPin({ pin, onClose }: ViewProps) {
           pinId={pin.id}
           photos={records.photos}
           canAdd={canModifyPin}
-          canDelete={(photo) => isMapOwner || photo.uploadedBy === currentUserId}
+          canDelete={(photo) => !readOnly && (isMapOwner || photo.uploadedBy === currentUserId)}
           onUpload={records.uploadPhotos}
           onDelete={records.removePhoto}
         />
@@ -129,22 +133,30 @@ function ViewPin({ pin, onClose }: ViewProps) {
 
         <VisitTimeline
           visits={records.visits}
-          canAdd={canPlacePins(role)}
-          canDelete={(visit) => isMapOwner || visit.userId === currentUserId}
+          canAdd={!readOnly && canPlacePins(role)}
+          canDelete={(visit) => !readOnly && (isMapOwner || visit.userId === currentUserId)}
           onAdd={records.addVisit}
           onDelete={records.removeVisit}
         />
 
-        <PrivateNoteBox
-          key={pin.id}
-          saved={privateNote}
-          onSave={(body) => savePrivateNote(pin.id, body)}
-          onDelete={() => deletePrivateNote(pin.id)}
-        />
+        {!readOnly && (
+          <PrivateNoteBox
+            key={pin.id}
+            saved={privateNote}
+            onSave={(body) => savePrivateNote(pin.id, body)}
+            onDelete={() => deletePrivateNote(pin.id)}
+          />
+        )}
 
         <p className="text-xs text-slate-500">{formatDate(pin.createdAt)}에 꽂았어요</p>
 
         {error && <p role="alert" className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>}
+
+        {readOnly && onOpenInMap && (
+          <button type="button" onClick={() => onOpenInMap(pin)} className="rounded-lg bg-teal-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-400">
+            이 지도에서 열기
+          </button>
+        )}
 
         {canModifyPin && (confirmingDelete ? (
           <div className="flex items-center gap-2 rounded-lg bg-rose-500/10 p-3">

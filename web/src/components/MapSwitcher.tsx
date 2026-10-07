@@ -1,4 +1,4 @@
-import { Plus, Settings } from 'lucide-react';
+import { Layers, Plus, Settings } from 'lucide-react';
 import { useId } from 'react';
 import type { PartyMap } from '../api/types';
 import { mapOrigin, ORIGIN_LABEL, ROLE_LABEL } from '../utils/mapRole';
@@ -10,12 +10,14 @@ interface Props {
   onSelect: (mapId: string) => void;
   onCreate: () => void;
   onSettings: () => void;
+  /** 여러 지도를 한 화면에 겹쳐보기 */
+  onOverlay: () => void;
 }
 
 const ORIGINS: MapOrigin[] = ['mine', 'friend', 'group'];
 
 /** 지도 위쪽에 떠 있는 "어느 지도를 볼까" 선택 바. */
-export default function MapSwitcher({ maps, selectedMapId, onSelect, onCreate, onSettings }: Props) {
+export default function MapSwitcher({ maps, selectedMapId, onSelect, onCreate, onSettings, onOverlay }: Props) {
   const selectId = useId();
   const selected = maps.find((map) => map.id === selectedMapId) ?? null;
   return (
@@ -39,6 +41,9 @@ export default function MapSwitcher({ maps, selectedMapId, onSelect, onCreate, o
           );
         })}
       </select>
+      <button type="button" onClick={onOverlay} disabled={maps.length === 0} className="rounded-lg p-2 text-teal-300 hover:bg-slate-800 disabled:text-slate-600" aria-label="여러 지도 겹쳐보기">
+        <Layers size={18} />
+      </button>
       <button type="button" onClick={onCreate} className="rounded-lg bg-teal-500 p-2 text-slate-950 hover:bg-teal-400" aria-label="새 지도 만들기">
         <Plus size={18} />
       </button>

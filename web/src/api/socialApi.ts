@@ -10,6 +10,7 @@ import type {
   MapGroupView,
   MapMember,
   PartyMap,
+  Pin,
   RequestResult,
   ShareRole,
   ShareView,
@@ -182,5 +183,19 @@ export async function previewGroupInvite(code: string, signal?: AbortSignal): Pr
 
 export async function joinGroup(code: string): Promise<JoinResult> {
   const response = await apiClient.post<Envelope<JoinResult>>(`/groups/invite/${encodeURIComponent(code)}/join`);
+  return response.data.data;
+}
+
+// ---------------------------------------------------------------- 겹쳐보기
+
+export interface OverlayResult {
+  /** 실제로 겹친 지도(요청한 것 중 내가 볼 수 있는 것) */
+  mapIds: string[];
+  pins: Pin[];
+}
+
+/** 고른 지도들의 핀을 한 번에 가져온다. 볼 수 없는 지도는 서버가 조용히 뺀다. */
+export async function getOverlay(mapIds: string[], signal?: AbortSignal): Promise<OverlayResult> {
+  const response = await apiClient.get<Envelope<OverlayResult>>('/overlay/pins', { params: { mapIds: mapIds.join(',') }, signal });
   return response.data.data;
 }
