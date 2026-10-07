@@ -102,6 +102,10 @@ party:
     max-pending-friend-requests: ${PARTY_MAX_PENDING_FRIEND_REQUESTS:20}
     # 친구·모임 초대 링크가 유효한 기간(일). 만료되면 다시 만들면 된다.
     invite-ttl-days: ${PARTY_INVITE_TTL_DAYS:14}
+    max-shares-per-map: ${PARTY_MAX_SHARES_PER_MAP:50}
+    max-groups-per-user: ${PARTY_MAX_GROUPS_PER_USER:20}
+    max-members-per-group: ${PARTY_MAX_MEMBERS_PER_GROUP:50}
+    max-groups-per-map: ${PARTY_MAX_GROUPS_PER_MAP:10}
 
   # "오늘" 을 정하는 서비스 시간대(방문 날짜가 미래인지 판단)
   timezone: ${PARTY_TIMEZONE:Asia/Seoul}

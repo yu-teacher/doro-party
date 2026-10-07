@@ -113,6 +113,18 @@ public abstract class PartyHttpTestBase {
         guardTuples.write(PartyGuard.MAP, mapId, relation, PartyGuard.USER, user.id().toString());
     }
 
+    /** 초대 링크로 두 사람을 친구로 만든다. */
+    protected void befriend(TestUser a, TestUser b) throws Exception {
+        String body = send(a, post("/api/v1/friends/invite")).andReturn().getResponse().getContentAsString();
+        String code = JsonPath.read(body, "$.data.code");
+        send(b, post("/api/v1/friends/invite/{c}/accept", code)).andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk());
+    }
+
+    /** 지도를 친구에게 공유한다(role: VIEWER / EDITOR). */
+    protected ResultActions shareMap(TestUser owner, String mapId, TestUser target, String role) throws Exception {
+        return send(owner, put("/api/v1/maps/{m}/shares/{u}", mapId, target.id()).contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"));
+    }
+
     /** 로그인한 테스트 사용자. 세션 쿠키로 요청을 인증한다. */
     public record TestUser(UUID id, String email, String cookie) {
 

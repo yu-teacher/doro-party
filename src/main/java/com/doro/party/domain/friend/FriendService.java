@@ -7,6 +7,7 @@ import com.doro.party.domain.friend.FriendDtos.FriendRequestView;
 import com.doro.party.domain.friend.FriendDtos.FriendView;
 import com.doro.party.domain.friend.FriendDtos.FriendsOverview;
 import com.doro.party.domain.friend.FriendDtos.RequestResult;
+import com.doro.party.domain.share.ShareService;
 import com.doro.party.domain.user.dto.PartyUserDtos.UserSummary;
 import com.doro.party.domain.user.entity.PartyUser;
 import com.doro.party.domain.user.repository.PartyUserRepository;
@@ -33,6 +34,7 @@ public class FriendService {
     private final PartyUserRepository users;
     private final PartyUserService userService;
     private final PartyLimits limits;
+    private final ShareService shareService;
 
     @Transactional(readOnly = true)
     public FriendsOverview overview(DoroUser doroUser) {
@@ -113,7 +115,9 @@ public class FriendService {
         if (friendships.deleteAccepted(pair[0], pair[1]) == 0) {
             throw new PartyException(ErrorCode.FRIEND_NOT_FOUND);
         }
-        log.info("Unfriended: a={}, b={}", doroUser.userId(), otherUserId);
+        // 끊은 쪽이 상대에게 공유해 둔 지도는 함께 회수한다(상대가 나에게 준 공유는 그대로)
+        int revoked = shareService.revokeGiven(doroUser.userId(), otherUserId);
+        log.info("Unfriended: a={}, b={}, revokedShares={}", doroUser.userId(), otherUserId, revoked);
     }
 
     /** 초대 링크 등 "바로 친구" 경로. 이미 친구면 그대로 두고, 대기 중인 요청이 있으면 수락으로 바꾼다. */

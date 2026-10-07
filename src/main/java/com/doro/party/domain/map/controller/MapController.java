@@ -38,10 +38,10 @@ public class MapController {
         return ApiResponse.success(mapService.create(doroUser, request));
     }
 
-    @Operation(summary = "내 지도 목록 (로그인)")
+    @Operation(summary = "내가 볼 수 있는 지도 목록 (로그인)", description = "내가 만든 지도와 친구가 공유한 지도. 각 지도에서 내 권한(role)과 주인 정보를 함께 준다")
     @GetMapping
-    public ApiResponse<List<MapResponse>> listMine(@CurrentDoroUser DoroUser doroUser) {
-        return ApiResponse.success(mapService.listMine(doroUser));
+    public ApiResponse<List<MapResponse>> listAccessible(@CurrentDoroUser DoroUser doroUser) {
+        return ApiResponse.success(mapService.listAccessible(doroUser));
     }
 
     @Operation(summary = "지도 상세 (Guard: viewer 이상)")

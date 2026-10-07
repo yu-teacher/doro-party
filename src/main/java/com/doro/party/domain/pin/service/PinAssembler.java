@@ -5,6 +5,10 @@ import com.doro.party.domain.pin.dto.PinDtos.PinStats;
 import com.doro.party.domain.pin.entity.Pin;
 import com.doro.party.domain.pin.photo.PinPhotoRepository;
 import com.doro.party.domain.pin.visit.VisitLogRepository;
+import com.doro.party.domain.user.entity.PartyUser;
+import com.doro.party.domain.user.repository.PartyUserRepository;
+import com.doro.party.common.exception.ErrorCode;
+import com.doro.party.common.exception.PartyException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +25,7 @@ public class PinAssembler {
 
     private final VisitLogRepository visits;
     private final PinPhotoRepository photos;
+    private final PartyUserRepository users;
 
     public List<PinResponse> assemble(List<Pin> pins) {
         if (pins.isEmpty()) {
@@ -29,6 +34,8 @@ public class PinAssembler {
         List<UUID> ids = pins.stream().map(Pin::getId).toList();
         Map<UUID, VisitLogRepository.VisitStat> visitStats = visits.statsByPinIds(ids).stream()
                 .collect(Collectors.toMap(VisitLogRepository.VisitStat::getPinId, stat -> stat));
+        Map<UUID, PartyUser> authors = users.findAllById(pins.stream().map(Pin::getCreatedBy).distinct().toList()).stream()
+                .collect(Collectors.toMap(PartyUser::getId, user -> user));
         Map<UUID, Long> photoCounts = new HashMap<>();
         photos.countsByPinIds(ids).forEach(count -> photoCounts.put(count.getPinId(), count.getCount()));
 
@@ -38,7 +45,11 @@ public class PinAssembler {
                     visit == null ? 0 : visit.getVisitCount(),
                     visit == null ? null : visit.getLastVisitedOn(),
                     photoCounts.getOrDefault(pin.getId(), 0L));
-            return PinResponse.from(pin, stats);
+            PartyUser author = authors.get(pin.getCreatedBy());
+            if (author == null) {
+                throw new PartyException(ErrorCode.USER_NOT_FOUND);
+            }
+            return PinResponse.from(pin, stats, author);
         }).toList();
     }
 

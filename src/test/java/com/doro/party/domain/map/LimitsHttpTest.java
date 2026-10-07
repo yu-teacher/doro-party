@@ -32,6 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "party.limits.max-visits-per-pin=3",
         "party.limits.max-photos-per-pin=2",
         "party.limits.max-photo-bytes=2048",
+        "party.limits.max-shares-per-map=2",
+        "party.limits.max-pending-friend-requests=2",
 })
 class LimitsHttpTest extends PartyHttpTestBase {
 
@@ -163,5 +165,46 @@ class LimitsHttpTest extends PartyHttpTestBase {
         mockMvc.perform(user.sign(multipart("/api/v1/maps/{m}/pins/{p}/photos", ids[0], ids[1])
                         .file(new MockMultipartFile("file", "big.png", "image/png", tooBig))))
                 .andExpect(status().isPayloadTooLarge()).andExpect(jsonPath("$.code").value("UPLOAD-413-01"));
+    }
+
+    @Test
+    @DisplayName("공유 인원 상한: 상한에 이르면 새로 공유할 수 없지만, 이미 공유한 사람의 권한 변경은 된다")
+    void shareLimit() throws Exception {
+        TestUser owner = newUser();
+        String mapId = createMap(owner, "공유 상한");
+        List<TestUser> friends = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            TestUser friend = newUser();
+            befriend(owner, friend);
+            friends.add(friend);
+        }
+
+        shareMap(owner, mapId, friends.get(0), "VIEWER").andExpect(status().isOk());
+        shareMap(owner, mapId, friends.get(1), "VIEWER").andExpect(status().isOk());
+        shareMap(owner, mapId, friends.get(2), "VIEWER").andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        shareMap(owner, mapId, friends.get(0), "EDITOR").andExpect(status().isOk());
+        assertThat(jdbc.queryForObject("select count(*) from map_user_shares where map_id = ?::uuid", Long.class, mapId)).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("대기 중인 친구 요청 상한: 넘으면 400 이고 보낸 요청은 남지 않는다")
+    void pendingFriendRequestLimit() throws Exception {
+        TestUser sender = newUser();
+        List<TestUser> targets = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            targets.add(newUser());
+        }
+        for (int i = 0; i < 2; i++) {
+            String name = JsonPath.read(mockMvc.perform(targets.get(i).sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/me")))
+                    .andReturn().getResponse().getContentAsString(), "$.data.username");
+            mockMvc.perform(sender.sign(post("/api/v1/friends/requests").contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"" + name + "\"}")))
+                    .andExpect(status().isOk());
+        }
+        String third = JsonPath.read(mockMvc.perform(targets.get(2).sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/me")))
+                .andReturn().getResponse().getContentAsString(), "$.data.username");
+
+        mockMvc.perform(sender.sign(post("/api/v1/friends/requests").contentType(MediaType.APPLICATION_JSON).content("{\"username\":\"" + third + "\"}")))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        assertThat(jdbc.queryForObject("select count(*) from friendships where requester_id = ?::uuid", Long.class, sender.id().toString())).isEqualTo(2L);
     }
 }

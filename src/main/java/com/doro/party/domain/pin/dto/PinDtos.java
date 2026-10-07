@@ -3,6 +3,7 @@ package com.doro.party.domain.pin.dto;
 import com.doro.party.domain.pin.entity.Pin;
 import com.doro.party.domain.pin.entity.PinStatus;
 import com.doro.party.domain.pin.entity.RevisitIntent;
+import com.doro.party.domain.user.entity.PartyUser;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -46,6 +47,8 @@ public final class PinDtos {
             UUID id,
             UUID mapId,
             UUID createdBy,
+            String authorNickname,
+            String authorColor,
             double lat,
             double lng,
             String name,
@@ -60,8 +63,8 @@ public final class PinDtos {
             Instant createdAt,
             Instant updatedAt
     ) {
-        public static PinResponse from(Pin pin, PinStats stats) {
-            return new PinResponse(pin.getId(), pin.getMapId(), pin.getCreatedBy(), pin.getLat(), pin.getLng(),
+        public static PinResponse from(Pin pin, PinStats stats, PartyUser author) {
+            return new PinResponse(pin.getId(), pin.getMapId(), pin.getCreatedBy(), author.getNickname(), author.getColor(), pin.getLat(), pin.getLng(),
                     pin.getName(), pin.getSharedMemo(), pin.getStatus(), pin.getRating(), pin.getRevisitIntent(),
                     pin.getTags().stream().sorted().toList(), stats.visitCount(), stats.lastVisitedOn(), stats.photoCount(),
                     pin.getCreatedAt(), pin.getUpdatedAt());

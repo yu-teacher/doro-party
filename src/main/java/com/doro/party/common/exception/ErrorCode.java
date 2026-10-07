@@ -25,6 +25,7 @@ public enum ErrorCode {
     // 404 Not Found
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER-404-01", "존재하지 않는 사용자입니다."),
     FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-01", "존재하지 않는 친구 요청입니다."),
+    SHARE_NOT_FOUND(HttpStatus.NOT_FOUND, "SHARE-404-01", "공유 정보를 찾을 수 없습니다."),
     FRIEND_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-02", "친구가 아닙니다."),
     INVITE_NOT_FOUND(HttpStatus.NOT_FOUND, "INVITE-404-01", "유효하지 않거나 만료된 초대 링크입니다."),
     MAP_NOT_FOUND(HttpStatus.NOT_FOUND, "MAP-404-01", "존재하지 않는 지도입니다."),

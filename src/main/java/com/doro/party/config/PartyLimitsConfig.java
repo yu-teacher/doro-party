@@ -23,7 +23,11 @@ public class PartyLimitsConfig {
             long maxPhotoBytes,
             int maxFriends,
             int maxPendingFriendRequests,
-            int inviteTtlDays
+            int inviteTtlDays,
+            int maxSharesPerMap,
+            int maxGroupsPerUser,
+            int maxMembersPerGroup,
+            int maxGroupsPerMap
     ) {
     }
 
