@@ -106,6 +106,9 @@ party:
     max-groups-per-user: ${PARTY_MAX_GROUPS_PER_USER:20}
     max-members-per-group: ${PARTY_MAX_MEMBERS_PER_GROUP:50}
     max-groups-per-map: ${PARTY_MAX_GROUPS_PER_MAP:10}
+    # 겹쳐보기: 한 번에 겹칠 수 있는 지도 수와 그 핀의 총 개수(한 번의 응답 크기를 제한한다)
+    max-overlay-maps: ${PARTY_MAX_OVERLAY_MAPS:20}
+    max-overlay-pins: ${PARTY_MAX_OVERLAY_PINS:5000}
 
   # "오늘" 을 정하는 서비스 시간대(방문 날짜가 미래인지 판단)
   timezone: ${PARTY_TIMEZONE:Asia/Seoul}

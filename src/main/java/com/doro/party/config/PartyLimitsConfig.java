@@ -27,7 +27,9 @@ public class PartyLimitsConfig {
             int maxSharesPerMap,
             int maxGroupsPerUser,
             int maxMembersPerGroup,
-            int maxGroupsPerMap
+            int maxGroupsPerMap,
+            int maxOverlayMaps,
+            int maxOverlayPins
     ) {
     }
 

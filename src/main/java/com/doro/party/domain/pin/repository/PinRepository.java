@@ -25,6 +25,11 @@ public interface PinRepository extends JpaRepository<Pin, UUID> {
 
     long countByMapId(UUID mapId);
 
+    long countByMapIdIn(Collection<UUID> mapIds);
+
+    /** 여러 지도의 핀(겹쳐보기). 지도 순서와 무관하게 만든 순서로 안정적으로 돌려준다. */
+    List<Pin> findAllByMapIdInOrderByCreatedAtAscIdAsc(Collection<UUID> mapIds);
+
     @Query("select p from Pin p where p.mapId = :mapId "
             + "and (:status is null or p.status = :status) "
             + "and (:tag is null or :tag member of p.tags) "

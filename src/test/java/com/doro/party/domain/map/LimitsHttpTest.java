@@ -37,6 +37,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "party.limits.max-members-per-group=2",
         "party.limits.max-groups-per-user=2",
         "party.limits.max-groups-per-map=1",
+        "party.limits.max-overlay-maps=2",
+        "party.limits.max-overlay-pins=3",
 })
 class LimitsHttpTest extends PartyHttpTestBase {
 
@@ -272,5 +274,27 @@ class LimitsHttpTest extends PartyHttpTestBase {
         mockMvc.perform(owner.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/maps/{m}/groups/{g}", mapId, first))).andExpect(status().isOk());
         mockMvc.perform(owner.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/v1/maps/{m}/groups/{g}", mapId, second)))
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+    }
+
+    @Test
+    @DisplayName("겹쳐보기 상한: 지도 수와 핀 총 개수를 넘으면 400, 상한 이내면 정상")
+    void overlayLimits() throws Exception {
+        TestUser user = newUser();
+        String first = createMap(user, "첫째");
+        String second = createMap(user, "둘째");
+        String third = createMap(user, "셋째");
+        for (String mapId : new String[]{first, second}) {
+            for (int i = 0; i < 2; i++) {
+                mockMvc.perform(user.sign(post("/api/v1/maps/{m}/pins", mapId).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"핀" + i + "\",\"lat\":37.5,\"lng\":127.0}"))).andExpect(status().isOk());
+            }
+        }
+
+        mockMvc.perform(user.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/overlay/pins").param("mapIds", first + "," + second + "," + third)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        mockMvc.perform(user.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/overlay/pins").param("mapIds", first + "," + second)))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("LIMIT-400-01"));
+        mockMvc.perform(user.sign(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/v1/overlay/pins").param("mapIds", first)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.pins.length()").value(2));
     }
 }
