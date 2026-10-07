@@ -35,6 +35,11 @@ public class PartyUser {
     @Column(nullable = false, length = 7)
     private String color;
 
+    public void updateProfile(String nickname, String username) {
+        this.nickname = nickname;
+        this.username = username;
+    }
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;

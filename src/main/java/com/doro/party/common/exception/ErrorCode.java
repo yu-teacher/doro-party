@@ -9,6 +9,8 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
     // 400 Bad Request
     INVALID_INPUT(HttpStatus.BAD_REQUEST, "COMMON-400-01", "잘못된 입력값입니다."),
+    CANNOT_FRIEND_SELF(HttpStatus.BAD_REQUEST, "FRIEND-400-01", "자기 자신과는 친구가 될 수 없습니다."),
+    NOT_FRIENDS(HttpStatus.BAD_REQUEST, "FRIEND-400-02", "친구에게만 할 수 있습니다."),
     LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "LIMIT-400-01", "허용된 개수를 넘었습니다."),
     FILE_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "UPLOAD-413-01", "사진 크기가 너무 큽니다."),
     INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "UPLOAD-400-01", "지원하지 않는 사진 형식입니다. JPEG, PNG, WebP 사진만 올릴 수 있습니다."),
@@ -22,12 +24,16 @@ public enum ErrorCode {
 
     // 404 Not Found
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER-404-01", "존재하지 않는 사용자입니다."),
+    FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-01", "존재하지 않는 친구 요청입니다."),
+    FRIEND_NOT_FOUND(HttpStatus.NOT_FOUND, "FRIEND-404-02", "친구가 아닙니다."),
+    INVITE_NOT_FOUND(HttpStatus.NOT_FOUND, "INVITE-404-01", "유효하지 않거나 만료된 초대 링크입니다."),
     MAP_NOT_FOUND(HttpStatus.NOT_FOUND, "MAP-404-01", "존재하지 않는 지도입니다."),
     PIN_NOT_FOUND(HttpStatus.NOT_FOUND, "PIN-404-01", "존재하지 않는 핀입니다."),
     VISIT_NOT_FOUND(HttpStatus.NOT_FOUND, "VISIT-404-01", "존재하지 않는 방문 기록입니다."),
     PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO-404-01", "존재하지 않는 사진입니다."),
 
     // 409 Conflict
+    USERNAME_TAKEN(HttpStatus.CONFLICT, "USER-409-01", "이미 사용 중인 사용자명입니다."),
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "COMMON-409-01", "이미 존재하는 리소스입니다."),
 
     // 503 Service Unavailable

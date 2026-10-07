@@ -20,7 +20,10 @@ public class PartyLimitsConfig {
             int maxTagsPerPin,
             int maxVisitsPerPin,
             int maxPhotosPerPin,
-            long maxPhotoBytes
+            long maxPhotoBytes,
+            int maxFriends,
+            int maxPendingFriendRequests,
+            int inviteTtlDays
     ) {
     }
 
