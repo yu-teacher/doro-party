@@ -12,12 +12,13 @@ set -Eeuo pipefail
 CONF="${GATEWAY_CONF:-$HOME/doro/gateway/nginx.conf}"
 PIECE="${PARTY_PIECE:-$HOME/doro-party/gateway-party.conf}"
 CONTAINER="${GATEWAY_CONTAINER:-doro-gateway}"
-APPLY=false; REPORT_ONLY=false
+APPLY=false; REPORT_ONLY=false; REFRESH=false
 for a in "$@"; do
   case "$a" in
     --apply) APPLY=true ;;
     --dry-run) APPLY=false ;;
     --report-only) REPORT_ONLY=true ;;
+    --refresh) REFRESH=true ;;   # 이미 반영된 도로 파티 블록을 조각 파일 내용으로 다시 쓴다(CSP 수정 등)
     *) echo "알 수 없는 옵션: $a" >&2; exit 2 ;;
   esac
 done
@@ -29,9 +30,9 @@ docker inspect "$CONTAINER" >/dev/null 2>&1 || die "$CONTAINER 컨테이너가 �
 
 TS="$(date +%Y%m%d-%H%M%S)"
 NEW="$(mktemp)"; trap 'rm -f "$NEW"' EXIT
-STATE="$(python3 - "$CONF" "$PIECE" "$NEW" "$REPORT_ONLY" <<'PY'
+STATE="$(python3 - "$CONF" "$PIECE" "$NEW" "$REPORT_ONLY" "$REFRESH" <<'PY'
 import re, sys
-conf_path, piece_path, out_path, report_only = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "true"
+conf_path, piece_path, out_path, report_only, refresh = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4] == "true", sys.argv[5] == "true"
 conf = open(conf_path, encoding="utf-8").read()
 piece = open(piece_path, encoding="utf-8").read()
 piece = "\n".join(l for l in piece.splitlines() if not l.lstrip().startswith("#"))  # 주석 줄은 넣지 않는다
@@ -50,6 +51,12 @@ def indent(block, n):
         out.append("" if not s else pad + ("" if s == "}" else "    ") + s)
     return "\n".join(out) + "\n"
 
+if refresh and "party_web_upstream" in conf:
+    # 이전에 넣은 블록(upstream 2개 + 표시 주석부터 location = /party 까지)만 정확히 걷어내고 아래에서 다시 넣는다
+    conf, n1 = re.subn(r"\n    upstream party_\w+\s*\{[^}]*\}\n", "", conf)
+    conf, n2 = re.subn(r"        # 도로 파티 \(/party/\).*?location = /party \{[^}]*\}\n\n", "", conf, flags=re.S)
+    if n1 != 2 or n2 != 1 or "party_" in conf.replace("party_group", ""):
+        sys.exit(f"기존 도로 파티 블록을 정확히 걷어내지 못했다(upstream {n1}, location 블록 {n2}). 수동 확인 필요")
 if "party_web_upstream" in conf:
     print("already"); open(out_path, "w", encoding="utf-8").write(conf); sys.exit(0)
 
