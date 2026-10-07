@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import { LIMITS } from '../api/types';
-import type { PinStatus } from '../api/types';
+import type { PinStatus, RevisitIntent } from '../api/types';
 import { validatePinForm } from '../utils/pinForm';
 import type { PinFormValues } from '../utils/pinForm';
 import StarRating from './StarRating';
@@ -18,6 +18,12 @@ interface Props {
 const STATUS_OPTIONS: ReadonlyArray<{ value: PinStatus; label: string }> = [
   { value: 'WISH', label: '가고 싶어요' },
   { value: 'VISITED', label: '다녀왔어요' },
+];
+
+const REVISIT_OPTIONS: ReadonlyArray<{ value: RevisitIntent | null; label: string }> = [
+  { value: null, label: '아직 몰라요' },
+  { value: 'AGAIN', label: '또 가고 싶어요' },
+  { value: 'ONCE', label: '한 번이면 충분' },
 ];
 
 export default function PinForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
@@ -82,6 +88,25 @@ export default function PinForm({ initial, submitLabel, onSubmit, onCancel }: Pr
           </button>
         ))}
       </div>
+
+      {values.status === 'VISITED' && (
+        <div role="radiogroup" aria-label="재방문 의사" className="grid grid-cols-3 gap-2">
+          {REVISIT_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              type="button"
+              role="radio"
+              aria-checked={values.revisitIntent === option.value}
+              onClick={() => update('revisitIntent', option.value)}
+              className={`rounded-lg border px-2 py-2 text-xs font-medium ${
+                values.revisitIntent === option.value ? 'border-sky-300 bg-sky-300/15 text-sky-100' : 'border-slate-700 text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div>
         <span className="mb-1.5 block text-sm font-medium text-slate-300">평점</span>

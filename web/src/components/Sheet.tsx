@@ -32,7 +32,7 @@ export default function Sheet({ title, onClose, children }: Props) {
       role="dialog"
       aria-label={title}
       tabIndex={-1}
-      className="absolute inset-x-0 bottom-0 z-20 mx-auto max-h-[72%] max-w-lg overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 shadow-2xl outline-none"
+      className="absolute inset-x-0 bottom-0 z-20 mx-auto max-h-[65%] max-w-lg overflow-y-auto rounded-t-2xl border-t border-slate-700 bg-slate-900 shadow-2xl outline-none"
     >
       <div className="sticky top-0 flex items-center justify-between bg-slate-900 px-4 pb-2 pt-3">
         <h2 className="text-base font-semibold text-slate-100">{title}</h2>

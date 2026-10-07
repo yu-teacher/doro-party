@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { create } from 'zustand';
 import * as mapsApi from '../api/mapsApi';
+import * as recordsApi from '../api/recordsApi';
 import type { MapInput, PartyMap, Pin, PinInput, PinStatus } from '../api/types';
 import { readSelectedMapId, writeSelectedMapId } from '../utils/selectedMapStorage';
 
@@ -12,6 +13,8 @@ interface MapState {
   selectedMapId: string | null;
   pins: Pin[];
   pinsLoading: boolean;
+  /** 이 지도에서 내가 남긴 사적 메모(핀 ID → 내용). 나만 볼 수 있다. */
+  privateNotes: Record<string, string>;
   /** 목록을 불러오지 못했을 때의 안내 문구 */
   error: string | null;
   statusFilter: StatusFilter;
@@ -26,6 +29,10 @@ interface MapState {
   addPin: (input: PinInput) => Promise<Pin>;
   editPin: (pinId: string, input: PinInput) => Promise<Pin>;
   removePin: (pinId: string) => Promise<void>;
+  /** 선택한 지도의 핀을 다시 불러온다(방문 기록·사진을 바꾼 뒤 횟수·상태를 맞춘다). 필터와 선택은 그대로 둔다. */
+  reloadPins: () => Promise<void>;
+  savePrivateNote: (pinId: string, body: string) => Promise<void>;
+  deletePrivateNote: (pinId: string) => Promise<void>;
   setStatusFilter: (filter: StatusFilter) => void;
   setTagFilter: (tag: string | null) => void;
   /** 로그아웃 등으로 내 데이터를 화면에서 비운다. */
@@ -38,6 +45,7 @@ const INITIAL = {
   selectedMapId: null as string | null,
   pins: [] as Pin[],
   pinsLoading: false,
+  privateNotes: {} as Record<string, string>,
   error: null as string | null,
   statusFilter: 'ALL' as StatusFilter,
   tagFilter: null as string | null,
@@ -48,6 +56,23 @@ let pinsRequest: AbortController | null = null;
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : '요청 처리 중 오류가 발생했습니다.';
+}
+
+function notesById(notes: ReadonlyArray<{ pinId: string; body: string }>): Record<string, string> {
+  return Object.fromEntries(notes.map((note) => [note.pinId, note.body]));
+}
+
+/** 사적 메모를 못 불러와도 핀은 보여 준다(메모만 비어 보인다). 취소는 호출자에게 알린다. */
+async function loadNotesOrEmpty(mapId: string, signal: AbortSignal) {
+  try {
+    return await recordsApi.listPrivateNotes(mapId, signal);
+  } catch (error) {
+    if (axios.isCancel(error)) {
+      throw error;
+    }
+    console.warn('Failed to load private notes', error);
+    return [];
+  }
 }
 
 function withPinCount(maps: PartyMap[], mapId: string, delta: number): PartyMap[] {
@@ -73,16 +98,16 @@ export const useMapStore = create<MapState>((set, get) => ({
   selectMap: async (mapId) => {
     pinsRequest?.abort();
     writeSelectedMapId(mapId);
-    set({ selectedMapId: mapId, pins: [], statusFilter: 'ALL', tagFilter: null, pinsLoading: mapId !== null });
+    set({ selectedMapId: mapId, pins: [], privateNotes: {}, statusFilter: 'ALL', tagFilter: null, pinsLoading: mapId !== null });
     if (mapId === null) {
       return;
     }
     const request = new AbortController();
     pinsRequest = request;
     try {
-      const pins = await mapsApi.listPins(mapId, request.signal);
+      const [pins, notes] = await Promise.all([mapsApi.listPins(mapId, request.signal), loadNotesOrEmpty(mapId, request.signal)]);
       if (get().selectedMapId === mapId) {
-        set({ pins, pinsLoading: false, error: null });
+        set({ pins, privateNotes: notesById(notes), pinsLoading: false, error: null });
       }
     } catch (error) {
       if (axios.isCancel(error)) {
@@ -145,6 +170,46 @@ export const useMapStore = create<MapState>((set, get) => ({
     }
     await mapsApi.deletePin(mapId, pinId);
     set((state) => ({ pins: state.pins.filter((pin) => pin.id !== pinId), maps: withPinCount(state.maps, mapId, -1) }));
+  },
+
+  reloadPins: async () => {
+    const mapId = get().selectedMapId;
+    if (mapId === null) {
+      return;
+    }
+    try {
+      const pins = await mapsApi.listPins(mapId);
+      if (get().selectedMapId === mapId) {
+        set((state) => ({ pins, maps: state.maps.map((map) => (map.id === mapId ? { ...map, pinCount: pins.length } : map)) }));
+      }
+    } catch (error) {
+      // 기록은 이미 저장됐으므로 요청을 실패시키지 않고, 화면의 횟수가 늦게 맞을 수 있음을 남긴다
+      console.warn('Failed to refresh pins', error);
+    }
+  },
+
+  savePrivateNote: async (pinId, body) => {
+    const mapId = get().selectedMapId;
+    if (mapId === null) {
+      throw new Error('지도를 먼저 골라 주세요.');
+    }
+    const saved = await recordsApi.savePrivateNote(mapId, pinId, body);
+    if (get().selectedMapId === mapId) {
+      set((state) => ({ privateNotes: { ...state.privateNotes, [pinId]: saved.body } }));
+    }
+  },
+
+  deletePrivateNote: async (pinId) => {
+    const mapId = get().selectedMapId;
+    if (mapId === null) {
+      throw new Error('지도를 먼저 골라 주세요.');
+    }
+    await recordsApi.deletePrivateNote(mapId, pinId);
+    if (get().selectedMapId === mapId) {
+      set((state) => ({
+        privateNotes: Object.fromEntries(Object.entries(state.privateNotes).filter(([id]) => id !== pinId)),
+      }));
+    }
   },
 
   setStatusFilter: (filter) => set({ statusFilter: filter }),

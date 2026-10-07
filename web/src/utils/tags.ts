@@ -43,3 +43,34 @@ export function collectTags(pins: ReadonlyArray<{ tags: string[] }>): string[] {
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ko'))
     .map(([tag]) => tag);
 }
+
+export interface TagInputResult {
+  tags: string[];
+  /** 입력창에 남겨 둘 글자(아직 확정되지 않은 부분) */
+  draft: string;
+  error: 'invalid' | 'limit' | null;
+}
+
+/**
+ * 입력창의 값에 쉼표가 들어오면 그 앞까지를 태그로 확정한다. 한글 입력기는 조합 중인 글자를 쉼표와 함께 확정하므로
+ * 키 이벤트가 아니라 입력된 값을 보고 나눈다. 확정할 수 없는 조각(형식 오류·개수 초과)은 입력창에 되돌려 놓는다.
+ */
+export function applyTagInput(tags: string[], value: string): TagInputResult {
+  if (!value.includes(',')) {
+    return { tags, draft: value, error: null };
+  }
+  const segments = value.split(',');
+  const rest = segments[segments.length - 1];
+  let current = tags;
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    if (segments[i].trim() === '') {
+      continue;
+    }
+    const added = addTag(current, segments[i]);
+    if (!added.ok) {
+      return { tags: current, draft: segments.slice(i).join(','), error: added.reason };
+    }
+    current = added.tags;
+  }
+  return { tags: current, draft: rest, error: null };
+}

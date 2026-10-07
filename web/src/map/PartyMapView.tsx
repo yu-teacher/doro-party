@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import type { Ref } from 'react';
 import type { Pin } from '../api/types';
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_LEVEL, KAKAO_MAP_APP_KEY } from '../config';
 import { loadKakaoMaps } from './loadKakaoMaps';
@@ -12,7 +13,14 @@ export interface LatLngLiteral {
   lng: number;
 }
 
+/** 부모가 지도에서 읽어 가는 값. 지도 객체 자체는 밖으로 내보내지 않는다. */
+export interface PartyMapHandle {
+  /** 지금 화면 중앙의 좌표. 지도가 아직 준비되지 않았으면 null. */
+  getCenter: () => LatLngLiteral | null;
+}
+
 interface Props {
+  ref?: Ref<PartyMapHandle>;
   pins: Pin[];
   selectedPinId: string | null;
   /** 아직 저장하지 않은, 방금 눌러 놓은 위치 */
@@ -34,7 +42,7 @@ function toImage(icon: MarkerIconSpec): kakao.maps.MarkerImage {
 }
 
 /** 화면 가득 카카오맵을 그리고 핀을 마커로 보여 준다. 키가 없거나 SDK 를 못 불러오면 이유를 안내한다. */
-export default function PartyMapView({ pins, selectedPinId, draft, fitKey, panTo, onMapClick, onPinClick }: Props) {
+export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, onMapClick, onPinClick }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markersRef = useRef(new Map<string, kakao.maps.Marker>());
@@ -43,6 +51,13 @@ export default function PartyMapView({ pins, selectedPinId, draft, fitKey, panTo
   const handlersRef = useRef({ onMapClick, onPinClick });
   const [status, setStatus] = useState<Status>(KAKAO_MAP_APP_KEY ? 'loading' : 'no-key');
   const [message, setMessage] = useState('');
+
+  useImperativeHandle(ref, () => ({
+    getCenter: () => {
+      const center = mapRef.current?.getCenter();
+      return center ? { lat: center.getLat(), lng: center.getLng() } : null;
+    },
+  }), []);
 
   // 이벤트 핸들러는 마커가 오래 살아 있어도 항상 최신 콜백을 부르도록 ref 로 들고 있는다.
   useEffect(() => {

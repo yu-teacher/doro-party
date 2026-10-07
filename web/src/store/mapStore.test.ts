@@ -1,11 +1,14 @@
 import axios from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as mapsApi from '../api/mapsApi';
+import * as recordsApi from '../api/recordsApi';
 import type { PartyMap, Pin, PinInput } from '../api/types';
 import { filterPins, useMapStore } from './mapStore';
 
 vi.mock('../api/mapsApi');
+vi.mock('../api/recordsApi');
 const api = vi.mocked(mapsApi);
+const records = vi.mocked(recordsApi);
 
 function map(id: string, pinCount = 0): PartyMap {
   return { id, name: `지도 ${id}`, description: null, ownerId: 'u', mine: true, pinCount, createdAt: '', updatedAt: '' };
@@ -14,16 +17,18 @@ function map(id: string, pinCount = 0): PartyMap {
 function pin(id: string, mapId: string, overrides: Partial<Pin> = {}): Pin {
   return {
     id, mapId, createdBy: 'u', lat: 37.5, lng: 127, name: `핀 ${id}`, sharedMemo: null,
-    status: 'WISH', rating: null, tags: [], createdAt: '', updatedAt: '', ...overrides,
+    status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0,
+    createdAt: '', updatedAt: '', ...overrides,
   };
 }
 
-const INPUT: PinInput = { name: '새 핀', sharedMemo: null, lat: 37.5, lng: 127, status: 'WISH', rating: null, tags: [] };
+const INPUT: PinInput = { name: '새 핀', sharedMemo: null, lat: 37.5, lng: 127, status: 'WISH', rating: null, revisitIntent: null, tags: [] };
 
 beforeEach(() => {
   window.localStorage.clear();
   useMapStore.getState().reset();
   vi.resetAllMocks();
+  records.listPrivateNotes.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -157,5 +162,79 @@ describe('filterPins', () => {
     expect(filterPins(pins, 'VISITED', null).map((p) => p.id)).toEqual(['2', '3']);
     expect(filterPins(pins, 'ALL', '술집').map((p) => p.id)).toEqual(['1', '2']);
     expect(filterPins(pins, 'VISITED', '술집').map((p) => p.id)).toEqual(['2']);
+  });
+});
+
+describe('사적 메모', () => {
+  beforeEach(async () => {
+    api.listMyMaps.mockResolvedValue([map('a')]);
+    api.listPins.mockResolvedValue([pin('p1', 'a')]);
+    records.listPrivateNotes.mockResolvedValue([{ pinId: 'p1', body: '불친절', updatedAt: '' }]);
+    await useMapStore.getState().loadMaps();
+  });
+
+  it('지도를 열 때 내 메모를 핀 ID 로 묶어 가져온다', () => {
+    expect(useMapStore.getState().privateNotes).toEqual({ p1: '불친절' });
+  });
+
+  it('저장하면 덮어쓰고 삭제하면 지운다', async () => {
+    records.savePrivateNote.mockResolvedValue({ pinId: 'p1', body: '괜찮았음', updatedAt: '' });
+    records.deletePrivateNote.mockResolvedValue();
+
+    await useMapStore.getState().savePrivateNote('p1', '괜찮았음');
+    expect(useMapStore.getState().privateNotes).toEqual({ p1: '괜찮았음' });
+
+    await useMapStore.getState().deletePrivateNote('p1');
+    expect(useMapStore.getState().privateNotes).toEqual({});
+  });
+
+  it('메모를 못 불러와도 핀은 보여 준다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    records.listPrivateNotes.mockRejectedValue(new Error('서버 오류'));
+
+    await useMapStore.getState().selectMap('a');
+
+    expect(useMapStore.getState().pins).toHaveLength(1);
+    expect(useMapStore.getState().privateNotes).toEqual({});
+    expect(useMapStore.getState().error).toBeNull();
+  });
+
+  it('지도를 바꾸면 이전 지도의 메모는 비운다', async () => {
+    api.listPins.mockResolvedValue([]);
+    records.listPrivateNotes.mockResolvedValue([]);
+
+    await useMapStore.getState().selectMap('b');
+
+    expect(useMapStore.getState().privateNotes).toEqual({});
+  });
+});
+
+describe('reloadPins', () => {
+  it('선택과 필터를 유지한 채 핀을 다시 불러오고 지도의 핀 개수를 맞춘다', async () => {
+    api.listMyMaps.mockResolvedValue([map('a', 1)]);
+    api.listPins.mockResolvedValueOnce([pin('p1', 'a')]);
+    await useMapStore.getState().loadMaps();
+    useMapStore.getState().setStatusFilter('VISITED');
+    api.listPins.mockResolvedValueOnce([pin('p1', 'a', { status: 'VISITED', visitCount: 1 }), pin('p2', 'a')]);
+
+    await useMapStore.getState().reloadPins();
+
+    expect(useMapStore.getState().pins.map((p) => p.id)).toEqual(['p1', 'p2']);
+    expect(useMapStore.getState().pins[0]).toMatchObject({ status: 'VISITED', visitCount: 1 });
+    expect(useMapStore.getState().maps[0].pinCount).toBe(2);
+    expect(useMapStore.getState().statusFilter).toBe('VISITED');
+  });
+
+  it('다시 불러오지 못해도 기존 목록을 그대로 두고 오류로 올리지 않는다', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    api.listMyMaps.mockResolvedValue([map('a', 1)]);
+    api.listPins.mockResolvedValueOnce([pin('p1', 'a')]);
+    await useMapStore.getState().loadMaps();
+    api.listPins.mockRejectedValueOnce(new Error('끊김'));
+
+    await useMapStore.getState().reloadPins();
+
+    expect(useMapStore.getState().pins).toHaveLength(1);
+    expect(useMapStore.getState().error).toBeNull();
   });
 });

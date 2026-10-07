@@ -20,7 +20,15 @@ describe('validatePinForm', () => {
 describe('toPinInput', () => {
   it('공백을 정리하고 빈 메모는 null 로 보낸다', () => {
     const input = toPinInput({ ...EMPTY_PIN_FORM, name: '  연남 카페 ', sharedMemo: '  ', tags: ['카페'] }, 37.5, 127.0);
-    expect(input).toEqual({ name: '연남 카페', sharedMemo: null, lat: 37.5, lng: 127.0, status: 'WISH', rating: null, tags: ['카페'] });
+    expect(input).toEqual({ name: '연남 카페', sharedMemo: null, lat: 37.5, lng: 127.0, status: 'WISH', rating: null, revisitIntent: null, tags: ['카페'] });
+  });
+});
+
+describe('재방문 의사', () => {
+  it('다녀온 곳에서만 보내고, 가고 싶은 곳으로 바꾸면 비운다', () => {
+    const visited = { ...EMPTY_PIN_FORM, name: 'a', status: 'VISITED' as const, revisitIntent: 'AGAIN' as const };
+    expect(toPinInput(visited, 1, 2).revisitIntent).toBe('AGAIN');
+    expect(toPinInput({ ...visited, status: 'WISH' }, 1, 2).revisitIntent).toBeNull();
   });
 });
 
@@ -28,8 +36,9 @@ describe('formValuesFromPin', () => {
   it('핀을 폼 값으로 되돌린다(메모가 없으면 빈 문자열)', () => {
     const pin: Pin = {
       id: 'p', mapId: 'm', createdBy: 'u', lat: 1, lng: 2, name: '이름', sharedMemo: null,
-      status: 'VISITED', rating: 4, tags: ['a'], createdAt: '', updatedAt: '',
+      status: 'VISITED', rating: 4, revisitIntent: 'ONCE', tags: ['a'], visitCount: 0, lastVisitedOn: null, photoCount: 0,
+      createdAt: '', updatedAt: '',
     };
-    expect(formValuesFromPin(pin)).toEqual({ name: '이름', sharedMemo: '', status: 'VISITED', rating: 4, tags: ['a'] });
+    expect(formValuesFromPin(pin)).toEqual({ name: '이름', sharedMemo: '', status: 'VISITED', rating: 4, revisitIntent: 'ONCE', tags: ['a'] });
   });
 });
