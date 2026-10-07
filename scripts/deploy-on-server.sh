@@ -69,7 +69,14 @@ for svc in api web; do
   img="$(docker inspect --format '{{.Image}}' "doro-party-$svc" 2>/dev/null || true)"
   [ -n "$img" ] && docker tag "$img" "doro-party-rollback:$svc-$TS" && echo "$svc $img" >> "$SNAP/images.txt"
 done
-"$HOME/ops/backup.sh" backup | tail -2
+# 첫 배포 전에는 service_party 가 빈 DB 라서(테이블은 앱이 처음 기동할 때 Flyway 가 만든다) backup.sh 의 "테이블 데이터 없음" 검사에 걸린다.
+# 이때만 백업을 건너뛴다(지킬 데이터가 없다). 테이블이 생긴 뒤에는 정기 백업·배포 백업이 모두 이 DB 를 포함한다.
+PARTY_TABLES="$(docker exec doro-postgres sh -c "psql -U \"\$POSTGRES_USER\" -d ${PARTY_DB:-service_party} -tAc \"SELECT count(*) FROM information_schema.tables WHERE table_schema='public'\"" 2>/dev/null || echo error)"
+case "$PARTY_TABLES" in
+  0) log "  첫 배포: ${PARTY_DB:-service_party} 에 테이블이 없어 백업을 건너뛴다" ;;
+  ''|*[!0-9]*) die "${PARTY_DB:-service_party} 테이블 수를 확인하지 못했다($PARTY_TABLES)" ;;
+  *) "$HOME/ops/backup.sh" backup | tail -2 ;;
+esac
 
 apply_release() {  # $1=jar 경로, $2=dist 경로
   mkdir -p "$REMOTE_DIR/build/libs" "$REMOTE_DIR/web/dist"
