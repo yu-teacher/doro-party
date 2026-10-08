@@ -78,6 +78,24 @@ case "$PARTY_TABLES" in
   *) "$HOME/ops/backup.sh" backup | tail -2 ;;
 esac
 
+# 배포가 성공한 뒤에만 오래된 산출물을 정리한다(정리 실패가 배포를 실패로 만들지 않는다). 서버 디스크(128GB)를 채우는 주범이 롤백 이미지와 빌드 캐시였다.
+#  - 롤백 이미지: 종류별(api web)로 최근 ROLLBACK_KEEP 개만 남긴다. 실행 중인 이미지는 docker 가 지우지 않는다.
+#  - 롤백 스냅샷 폴더(~/backups/pre-party-deploy-*): 최근 SNAPSHOT_KEEP 개만 남긴다.
+#  - 빌드 캐시: BUILD_CACHE_KEEP_HOURS 시간보다 오래된 것만 지운다(다른 서비스 CI 가 방금 만든 캐시는 건드리지 않는다).
+prune_old_releases() {
+  local keep="${ROLLBACK_KEEP:-5}" snap_keep="${SNAPSHOT_KEEP:-5}" kind tag dir
+  for kind in api web; do
+    docker images "doro-party-rollback" --format '{{.Tag}}' | grep "^$kind-" | sort -r | tail -n +"$((keep + 1))" | while read -r tag; do
+      docker rmi "doro-party-rollback:$tag" >/dev/null 2>&1 || true
+    done
+  done
+  ls -1d "$HOME/backups/pre-party-deploy-"* 2>/dev/null | sort -r | tail -n +"$((snap_keep + 1))" | while read -r dir; do
+    rm -rf -- "$dir"
+  done
+  docker builder prune -f --filter "until=${BUILD_CACHE_KEEP_HOURS:-72}h" 2>&1 | tail -1 || true
+  log "  정리 완료: 롤백 이미지 종류별 ${keep}개, 스냅샷 ${snap_keep}개, 빌드 캐시 ${BUILD_CACHE_KEEP_HOURS:-72}시간 초과분 삭제. 디스크: $(df -h / | awk 'NR==2{print $5" 사용, 여유 "$4}')"
+}
+
 apply_release() {  # $1=jar 경로, $2=dist 경로
   mkdir -p "$REMOTE_DIR/build/libs" "$REMOTE_DIR/web/dist"
   cp -f "$1" "$REMOTE_DIR/build/libs/doro-party-0.0.1-SNAPSHOT.jar"
@@ -101,6 +119,7 @@ apply_release "$PARTY_SRC/$JAR_REL" "$PARTY_SRC/web/dist"
 
 log "== 헬스체크 (최대 ${HEALTH_TIMEOUT_SEC}s) =="
 if wait_healthy; then
+  prune_old_releases || log "경고: 오래된 산출물 정리에 실패했다(배포는 성공)"
   log "완료. 롤백 지점: $SNAP, 이미지 태그 doro-party-rollback:{api,web}-$TS"
   exit 0
 fi
