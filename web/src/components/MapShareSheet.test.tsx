@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as mapsApi from '../api/mapsApi';
 import * as socialApi from '../api/socialApi';
-import type { FriendAccess, PartyMap } from '../api/types';
+import type { FriendAccess, PartyMap, ShareView } from '../api/types';
 import { useMapStore } from '../store/mapStore';
 import MapShareSheet from './MapShareSheet';
 
@@ -115,5 +115,59 @@ describe('MapShareSheet: 친구 전체에게 공개', () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('권한이 없어요');
     expect(checkedLabel()).toBe('비공개');
     expect(useMapStore.getState().maps[0].friendAccess).toBe('NONE');
+  });
+});
+
+describe('MapShareSheet: 핀을 추가할 수 있는 사람', () => {
+  const person = (id: string, nickname: string) => ({ id, username: id, nickname, color: '#A78BFA' });
+  const shareOf = (id: string, nickname: string, role: ShareView['role']): ShareView => ({ user: person(id, nickname), role, sharedAt: '' });
+  const note = () => container.querySelector('[role="note"][aria-label="핀을 추가할 수 있는 사람"]') as HTMLElement;
+  const noteNames = () => Array.from(note().querySelectorAll('li')).map((item) => item.textContent);
+
+  it('아무에게도 편집 권한을 주지 않았으면 나만 나오고, 모임은 보기만 한다고 알려 준다', async () => {
+    useMapStore.setState({ maps: [myMap('NONE')] });
+    social.listShares.mockResolvedValue([shareOf('f1', '민준', 'VIEWER')]);
+    await render();
+    expect(noteNames()).toEqual(['나']);
+    expect(note().textContent).toContain('모임장을 포함해 모임원 모두가 보기만 해요');
+  });
+
+  it('직접 편집 권한을 준 친구와 친구 전체 편집 공개를 모두 보여 준다(보기만 받은 친구는 뺀다)', async () => {
+    useMapStore.setState({ maps: [myMap('EDITOR')] });
+    social.listShares.mockResolvedValue([shareOf('f1', '서연', 'EDITOR'), shareOf('f2', '민준', 'VIEWER'), shareOf('f3', '지호', 'EDITOR')]);
+    await render();
+    expect(noteNames()).toEqual(['나', '서연', '지호', '내 친구 전체']);
+  });
+
+  it('편집 권한을 받은 친구의 줄에는 "핀 추가 가능" 표시가 붙고, 보기만 받은 친구에는 붙지 않는다', async () => {
+    useMapStore.setState({ maps: [myMap('NONE')] });
+    social.listShares.mockResolvedValue([shareOf('f1', '서연', 'EDITOR'), shareOf('f2', '민준', 'VIEWER')]);
+    await render();
+    const rows = Array.from(container.querySelectorAll('ul li')).filter((row) => row.querySelector('select'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain('핀 추가 가능');
+    expect(rows[1].textContent).not.toContain('핀 추가 가능');
+  });
+
+  it('특정 친구에게 "핀도 꽂기"를 고르면 경고가 나오고, "보기만"으로 돌리면 사라진다', async () => {
+    useMapStore.setState({ maps: [myMap('NONE')] });
+    social.getFriends.mockResolvedValue({ friends: [{ user: person('f1', '서연'), since: '' }], incoming: [], outgoing: [] });
+    await render();
+    const roleSelect = container.querySelector('#share-role') as HTMLSelectElement;
+    const warning = () => Array.from(container.querySelectorAll('[role="note"]')).find((el) => el.textContent?.includes('핀을 추가할 수 있어요. 남이 꽂은 핀'));
+    expect(roleSelect.value).toBe('VIEWER');
+    expect(warning()).toBeUndefined();
+
+    const choose = async (value: string) => {
+      await act(async () => {
+        const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+        setter?.call(roleSelect, value);
+        roleSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    await choose('EDITOR');
+    expect(warning()?.textContent).toContain('지도를 지우는 건 할 수 없어요');
+    await choose('VIEWER');
+    expect(warning()).toBeUndefined();
   });
 });

@@ -5,6 +5,7 @@ import * as socialApi from '../api/socialApi';
 import type { FriendAccess, PartyMap, ShareRole } from '../api/types';
 import { useResource } from '../hooks/useResource';
 import { useMapStore } from '../store/mapStore';
+import { editorLabels, hasOtherEditors, summarizeEditors } from '../utils/editorSummary';
 import Section from './Section';
 import Sheet from './Sheet';
 import UserDot from './UserDot';
@@ -70,11 +71,23 @@ export default function MapShareSheet({ map, onClose }: Props) {
     );
   };
   const currentAccess = ACCESS_OPTIONS.find((option) => option.value === map.friendAccess) ?? ACCESS_OPTIONS[0];
+  const editors = summarizeEditors(shares.data ?? [], map.friendAccess);
+  const othersCanEdit = hasOtherEditors(editors);
 
   return (
     <Sheet title={`「${map.name}」 공개 범위`} onClose={onClose}>
       <div className="flex flex-col gap-5">
         {error && <p role="alert" className="rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-200">{error}</p>}
+
+        <div role="note" aria-label="핀을 추가할 수 있는 사람" className={`flex flex-col gap-1.5 rounded-xl p-3 ring-1 ${othersCanEdit ? 'bg-amber-400/10 ring-amber-400/40' : 'bg-slate-800/60 ring-slate-700'}`}>
+          <p className="text-xs font-semibold text-slate-300">핀을 추가할 수 있는 사람</p>
+          <ul className="flex flex-wrap gap-1.5">
+            {editorLabels(editors).map((label) => (
+              <li key={label} className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${label === '나' ? 'bg-slate-700 text-slate-200' : 'bg-amber-400/20 text-amber-100'}`}>{label}</li>
+            ))}
+          </ul>
+          <p className="text-xs text-slate-500">모임에 공유한 지도는 모임장을 포함해 모임원 모두가 보기만 해요. 남이 꽂은 핀을 고치거나 지도를 지우는 건 주인만 할 수 있어요.</p>
+        </div>
 
         <Section title="친구 전체에게 공개" hint="한 번에 모든 친구에게 적용돼요">
           <div role="radiogroup" aria-label="친구 전체 공개 범위" className="grid grid-cols-3 gap-1.5">
@@ -104,14 +117,17 @@ export default function MapShareSheet({ map, onClose }: Props) {
             <ul className="flex flex-col gap-2">
               {(shares.data ?? []).map((share) => (
                 <li key={share.user.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-800/60 p-3">
-                  <UserDot nickname={share.user.nickname} color={share.user.color} />
+                  <span className="flex min-w-0 items-center gap-2">
+                    <UserDot nickname={share.user.nickname} color={share.user.color} />
+                    {share.role === 'EDITOR' && <span className="shrink-0 rounded-full bg-amber-400/20 px-2 py-0.5 text-[10px] font-semibold text-amber-200">핀 추가 가능</span>}
+                  </span>
                   <span className="flex shrink-0 items-center gap-1.5">
                     <select
                       aria-label={`${share.user.nickname}님의 권한`}
                       value={share.role}
                       disabled={busy}
                       onChange={(event) => void run(() => socialApi.shareMap(map.id, share.user.id, event.target.value as ShareRole), '권한을 바꾸지 못했어요.', shares.reload)}
-                      className="rounded-md bg-slate-700 px-2 py-1.5 text-xs text-slate-100 outline-none"
+                      className={`rounded-md px-2 py-1.5 text-xs outline-none ${share.role === 'EDITOR' ? 'bg-amber-400/20 text-amber-100' : 'bg-slate-700 text-slate-100'}`}
                     >
                       {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
@@ -123,19 +139,24 @@ export default function MapShareSheet({ map, onClose }: Props) {
             </ul>
           )}
           {candidates.length > 0 ? (
-            <div className="flex gap-2">
-              <label htmlFor="share-friend" className="sr-only">공유할 친구</label>
-              <select id="share-friend" value={friendId} onChange={(event) => setFriendId(event.target.value)} className="min-w-0 flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none">
-                <option value="">친구 고르기…</option>
-                {candidates.map((friend) => <option key={friend.user.id} value={friend.user.id}>{friend.user.nickname}</option>)}
-              </select>
-              <label htmlFor="share-role" className="sr-only">권한</label>
-              <select id="share-role" value={role} onChange={(event) => setRole(event.target.value as ShareRole)} className="rounded-lg bg-slate-800 px-2 text-sm text-slate-100 outline-none">
-                {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
-              <button type="button" disabled={busy || friendId === ''} onClick={() => void run(() => socialApi.shareMap(map.id, friendId, role), '공유하지 못했어요.', () => { setFriendId(''); shares.reload(); })}
-                className="rounded-lg bg-teal-500 px-4 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-40">공유</button>
-            </div>
+            <>
+              <div className="flex gap-2">
+                <label htmlFor="share-friend" className="sr-only">공유할 친구</label>
+                <select id="share-friend" value={friendId} onChange={(event) => setFriendId(event.target.value)} className="min-w-0 flex-1 rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 outline-none">
+                  <option value="">친구 고르기…</option>
+                  {candidates.map((friend) => <option key={friend.user.id} value={friend.user.id}>{friend.user.nickname}</option>)}
+                </select>
+                <label htmlFor="share-role" className="sr-only">권한</label>
+                <select id="share-role" value={role} onChange={(event) => setRole(event.target.value as ShareRole)} className="rounded-lg bg-slate-800 px-2 text-sm text-slate-100 outline-none">
+                  {ROLE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <button type="button" disabled={busy || friendId === ''} onClick={() => void run(() => socialApi.shareMap(map.id, friendId, role), '공유하지 못했어요.', () => { setFriendId(''); shares.reload(); })}
+                  className="rounded-lg bg-teal-500 px-4 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-40">공유</button>
+              </div>
+              {role === 'EDITOR' && (
+                <p role="note" className="text-xs text-amber-300">“핀도 꽂기”를 고르면 선택한 친구가 이 지도에 핀을 추가할 수 있어요. 남이 꽂은 핀을 고치거나 지도를 지우는 건 할 수 없어요.</p>
+              )}
+            </>
           ) : (
             <p className="text-xs text-slate-500">{(friends.data?.friends ?? []).length === 0 ? '친구 탭에서 먼저 친구를 초대해 보세요.' : '모든 친구에게 이미 공유했어요.'}</p>
           )}
