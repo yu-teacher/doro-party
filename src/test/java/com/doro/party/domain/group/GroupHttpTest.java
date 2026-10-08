@@ -456,4 +456,78 @@ class GroupHttpTest extends PartyHttpTestBase {
         assertThat(count("select count(*) from party_group_members where group_id = ?::uuid and user_id = ?::uuid", groupId, guest.id().toString())).isEqualTo(1L);
         send(guest, get("/api/v1/groups/{g}", groupId)).andExpect(status().isOk());
     }
+
+    // ------------------------------------------------------------------ 방장도 남의 지도는 공유된 것만 본다
+
+    @Test
+    @DisplayName("방장도 멤버가 공유하지 않은 지도에는 접근할 수 없고, 공유된 지도는 보기만 할 수 있다(수정·핀 변경·공유 설정 모두 막힘)")
+    void groupOwnerCannotReachUnsharedMapsOfMembers() throws Exception {
+        TestUser leader = newUser();
+        TestUser member = newUser();
+        TestUser other = newUser();
+        String groupId = createGroup(leader, "방장 확인");
+        joinGroup(leader, groupId, member, other);
+        String otherGroupId = createGroup(member, "방장이 없는 모임");
+
+        String privateMap = newMapWithPin(member, "멤버의 비공개 지도");
+        String sharedMap = newMapWithPin(member, "모임에 공유한 지도");
+        String sharedElsewhere = newMapWithPin(member, "다른 모임에만 공유한 지도");
+        shareToGroup(member, sharedMap, groupId).andExpect(status().isOk());
+        shareToGroup(member, sharedElsewhere, otherGroupId).andExpect(status().isOk());
+        String privatePin = JsonPath.read(send(member, get("/api/v1/maps/{m}/pins", privateMap)).andReturn().getResponse().getContentAsString(), "$.data[0].id");
+        send(member, put("/api/v1/maps/{m}/pins/{p}/private-note", privateMap, privatePin).contentType(MediaType.APPLICATION_JSON).content("{\"body\":\"멤버만 아는 메모\"}"))
+                .andExpect(status().isOk());
+
+        // 공유하지 않은 지도: 읽기·쓰기·부가 정보 모두 막힌다
+        send(leader, get("/api/v1/maps/{m}", privateMap)).andExpect(status().isForbidden());
+        send(leader, get("/api/v1/maps/{m}/pins", privateMap)).andExpect(status().isForbidden());
+        send(leader, get("/api/v1/maps/{m}/private-notes", privateMap)).andExpect(status().isForbidden());
+        send(leader, get("/api/v1/maps/{m}/members", privateMap)).andExpect(status().isForbidden());
+        send(leader, post("/api/v1/maps/{m}/pins", privateMap).contentType(MediaType.APPLICATION_JSON).content(pinBody("침입", 37.6, 127.1, null, null, null)))
+                .andExpect(status().isForbidden());
+        send(leader, put("/api/v1/maps/{m}/friend-access", privateMap).contentType(MediaType.APPLICATION_JSON).content("{\"access\":\"VIEWER\"}")).andExpect(status().isForbidden());
+        send(leader, delete("/api/v1/maps/{m}", privateMap)).andExpect(status().isForbidden());
+        shareToGroup(leader, privateMap, groupId).andExpect(status().isForbidden());
+
+        // 목록·모임 화면·겹쳐보기·추천에도 나오지 않는다
+        String mine = send(leader, get("/api/v1/maps")).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(mine, "$.data[*].id")).containsExactly(sharedMap);
+        String groupMaps = send(leader, get("/api/v1/groups/{g}/maps", groupId)).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(groupMaps, "$.data[*].id")).containsExactly(sharedMap);
+        String overlay = send(leader, get("/api/v1/overlay/pins").param("mapIds", privateMap + "," + sharedElsewhere + "," + sharedMap))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(overlay, "$.data.mapIds")).containsExactly(sharedMap);
+        assertThat((List<String>) JsonPath.read(overlay, "$.data.pins[*].mapId")).containsOnly(sharedMap);
+        String recommendations = send(leader, get("/api/v1/groups/{g}/recommendations", groupId)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(recommendations, "$.data.mapIds")).containsExactly(sharedMap);
+        String overlayRecommendations = send(leader, get("/api/v1/overlay/recommendations").param("mapIds", privateMap + "," + sharedMap))
+                .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat((List<String>) JsonPath.read(overlayRecommendations, "$.data.mapIds")).containsExactly(sharedMap);
+
+        // 방장이 속하지 않은 모임에만 공유한 지도도 볼 수 없다
+        send(leader, get("/api/v1/maps/{m}", sharedElsewhere)).andExpect(status().isForbidden());
+        // 공유한 지도는 방장도 다른 멤버처럼 보기만 한다
+        send(leader, get("/api/v1/maps/{m}", sharedMap)).andExpect(status().isOk()).andExpect(jsonPath("$.data.role").value("VIEWER"));
+        send(leader, delete("/api/v1/maps/{m}", sharedMap)).andExpect(status().isForbidden());
+        // 모임에 공유된 지도는 방장도 고칠 수 없다: 지도 정보, 핀 추가·수정·삭제, 공유 설정 모두 막힌다
+        String sharedPin = JsonPath.read(send(leader, get("/api/v1/maps/{m}/pins", sharedMap)).andReturn().getResponse().getContentAsString(), "$.data[0].id");
+        send(leader, put("/api/v1/maps/{m}", sharedMap).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"방장이 바꿈\"}")).andExpect(status().isForbidden());
+        send(leader, post("/api/v1/maps/{m}/pins", sharedMap).contentType(MediaType.APPLICATION_JSON).content(pinBody("방장의 핀", 37.6, 127.1, null, null, null)))
+                .andExpect(status().isForbidden());
+        putPin(leader, sharedMap, sharedPin, pinBody("방장이 고침", 37.6, 127.1, null, null, null)).andExpect(status().isForbidden());
+        send(leader, delete("/api/v1/maps/{m}/pins/{p}", sharedMap, sharedPin)).andExpect(status().isForbidden());
+        send(leader, put("/api/v1/maps/{m}/friend-access", sharedMap).contentType(MediaType.APPLICATION_JSON).content("{\"access\":\"EDITOR\"}")).andExpect(status().isForbidden());
+        send(leader, delete("/api/v1/maps/{m}/groups/{g}", sharedMap, groupId)).andExpect(status().isForbidden());
+        send(member, get("/api/v1/maps/{m}", sharedMap)).andExpect(jsonPath("$.data.name").value("모임에 공유한 지도"));
+
+        // 방장을 넘겨도 새 방장 역시 공유되지 않은 지도는 볼 수 없고, 이전 방장은 멤버로서 공유된 지도를 계속 본다
+        send(leader, put("/api/v1/groups/{g}/owner", groupId).contentType(MediaType.APPLICATION_JSON).content("{\"userId\":\"" + other.id() + "\"}")).andExpect(status().isOk());
+        send(other, get("/api/v1/maps/{m}", privateMap)).andExpect(status().isForbidden());
+        send(other, get("/api/v1/maps/{m}", sharedMap)).andExpect(status().isOk());
+        send(leader, get("/api/v1/maps/{m}", privateMap)).andExpect(status().isForbidden());
+        send(leader, get("/api/v1/maps/{m}", sharedMap)).andExpect(status().isOk());
+
+        // 지도 주인은 자기 지도를 그대로 쓴다
+        send(member, get("/api/v1/maps/{m}/private-notes", privateMap)).andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+    }
 }
