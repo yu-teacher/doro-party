@@ -19,6 +19,7 @@ JAR_REL="build/libs/doro-party-0.0.1-SNAPSHOT.jar"
 API_PORT="${PARTY_API_PORT:-8086}"
 WEB_PORT="${PARTY_WEB_PORT:-3005}"
 HEALTH_TIMEOUT_SEC="${HEALTH_TIMEOUT_SEC:-120}"
+GATEWAY_CONTAINER="${GATEWAY_CONTAINER:-doro-gateway}"
 JAVA_IMAGE="${CI_JAVA_IMAGE:-gradle:9.5.1-jdk25}"
 NODE_IMAGE="${CI_NODE_IMAGE:-node:24-alpine}"
 # 다른 서비스 배포와 Gradle 캐시를 나누어 쓴다: 같은 캐시 폴더를 동시에 쓰면 잠금 대기로 빌드가 실패할 수 있다.
@@ -45,6 +46,7 @@ docker info >/dev/null 2>&1 || die "docker 를 사용할 수 없다"
 # 카카오 지도 키는 웹 빌드 시점에 번들에 들어간다. 저장소에는 두지 않고 서버의 .env 에서만 읽는다(값은 로그에 남기지 않는다).
 KAKAO_KEY="$(grep -E '^VITE_KAKAO_MAP_APP_KEY=' "$REMOTE_DIR/.env" | head -1 | cut -d= -f2- || true)"
 [ -n "$KAKAO_KEY" ] || die "$REMOTE_DIR/.env 에 VITE_KAKAO_MAP_APP_KEY 가 없다"
+docker inspect "$GATEWAY_CONTAINER" >/dev/null 2>&1 || die "게이트웨이 컨테이너($GATEWAY_CONTAINER)를 찾을 수 없다 (GATEWAY_CONTAINER 로 이름을 지정한다)"
 log "  commit: $(git -C "$PARTY_SRC" rev-parse --short HEAD 2>/dev/null || echo '?'), 대상: $REMOTE_DIR"
 if [ "$DRY_RUN" = true ]; then log "--dry-run: 여기서 종료"; exit 0; fi
 
@@ -111,6 +113,13 @@ wait_healthy() {
   curl -fsS -o /dev/null "http://127.0.0.1:${API_PORT}/actuator/health" && curl -fsS -o /dev/null "http://127.0.0.1:${WEB_PORT}/party/"
 }
 
+# 게이트웨이(nginx)는 upstream 컨테이너의 IP 를 시작할 때 한 번만 찾는다. 컨테이너가 새로 만들어져 IP 가 바뀌면 옛 주소로 계속 연결해 502 가 나므로,
+# 컨테이너를 만든 뒤에는 설정을 검사하고 reload 해서 주소를 다시 찾게 한다(설정은 바꾸지 않고, 진행 중인 요청은 끊지 않는다).
+reload_gateway() {
+  docker exec "$GATEWAY_CONTAINER" nginx -t >/dev/null 2>&1 && docker exec "$GATEWAY_CONTAINER" nginx -s reload >/dev/null 2>&1 \
+    && log "  게이트웨이($GATEWAY_CONTAINER) reload 완료: 새 컨테이너 주소를 다시 찾는다"
+}
+
 log "== 반영 (compose 파일과 .env 는 보내지 않는다) =="
 cp -f "$PARTY_SRC/Dockerfile" "$REMOTE_DIR/Dockerfile"
 mkdir -p "$REMOTE_DIR/web"
@@ -119,6 +128,7 @@ apply_release "$PARTY_SRC/$JAR_REL" "$PARTY_SRC/web/dist"
 
 log "== 헬스체크 (최대 ${HEALTH_TIMEOUT_SEC}s) =="
 if wait_healthy; then
+  reload_gateway || die "게이트웨이 reload 에 실패했다. 서비스는 정상이지만 /party/ 가 502 일 수 있다: docker exec $GATEWAY_CONTAINER nginx -t && docker exec $GATEWAY_CONTAINER nginx -s reload"
   prune_old_releases || log "경고: 오래된 산출물 정리에 실패했다(배포는 성공)"
   log "완료. 롤백 지점: $SNAP, 이미지 태그 doro-party-rollback:{api,web}-$TS"
   exit 0
@@ -128,7 +138,7 @@ log "ERROR: 헬스체크 실패. 직전 릴리스로 자동 복구한다."
 docker logs --tail 40 doro-party-api || true
 if [ -d "$SNAP/libs" ] && [ -d "$SNAP/dist" ]; then
   apply_release "$SNAP/libs/doro-party-0.0.1-SNAPSHOT.jar" "$SNAP/dist"
-  if wait_healthy; then log "복구 완료: 직전 릴리스가 서비스 중이다."; else log "ERROR: 복구 후에도 헬스체크 실패. 수동 확인 필요 ($SNAP)."; fi
+  if wait_healthy; then reload_gateway || log "경고: 게이트웨이 reload 실패. 수동으로 reload 한다."; log "복구 완료: 직전 릴리스가 서비스 중이다."; else log "ERROR: 복구 후에도 헬스체크 실패. 수동 확인 필요 ($SNAP)."; fi
 else
   log "ERROR: 직전 릴리스 스냅샷이 없어(첫 배포) 자동 복구할 수 없다. 수동 확인 필요."
 fi
