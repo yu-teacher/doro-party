@@ -226,3 +226,9 @@ M4까지가 "쓸 만한 서비스"의 기준선이었고, M0~M5 는 모두 구�
 `DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media`, `PARTY_OAUTH_CLIENT_ID=doro-party`, `PARTY_OAUTH_REDIRECT_URI`, `PARTY_SESSION_KEY`(base64 32바이트, 기본값 없음), `PARTY_COOKIE_SECURE`, 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
 
 포트: party-api `8086`, party-web `3005`(Doro·blog·menu·sebi-wht·로컬의 다른 컨테이너가 쓰는 8080~8085, 8090, 3000~3004 와 겹치지 않음).
+
+### 앱 업데이트 (PWA)
+- 서비스 워커는 새 버전이 받아지면 바로 활성화한다(`skipWaiting`·`clientsClaim`). 하지만 **이미 떠 있는 화면은 옛 코드 그대로**이고, 홈 화면에 설치한 앱은 며칠씩 다시 로드되지 않아서 새 버전을 오래 못 받는다.
+- 그래서 서비스 워커 등록을 앱 코드(`src/pwa/versionWatcher.ts`)가 맡는다: 화면이 보이는 동안 주기적으로(15분, 최소 1분 간격), 그리고 화면으로 돌아올 때 `sw.js` 를 다시 확인한다. 새 버전이 활성화되면(이미 서비스 워커의 통제를 받던 화면에서 통제권이 바뀜) `src/pwa/applyUpdate.ts` 가 **배너 없이**, 앱을 떠났다 돌아오는 순간 열린 시트나 입력 중인 글이 없을 때 조용히 현재 주소를 다시 불러온다. 화면이 가려져 있을 때 들어오면 바로 바꾼다.
+- 주의: 등록을 앱 코드가 하면(`injectRegister: false`) 플러그인이 `skipWaiting`·`clientsClaim` 을 만들어 주지 않아서 새 서비스 워커가 앱을 완전히 닫을 때까지 대기한다. `workbox.skipWaiting/clientsClaim` 을 직접 켜 둔다(실제 크롬에서 두 버전 배포를 시뮬레이션해 확인).
+- 열어 둔 핀의 댓글은 화면이 보이는 동안 30초마다, 화면으로 돌아올 때 다시 불러오고, 새 댓글 배지는 60초마다 새로 받는다(간격은 `src/config.ts`).

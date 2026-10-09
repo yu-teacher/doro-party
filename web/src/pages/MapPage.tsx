@@ -20,6 +20,7 @@ import { toHeatSpots } from '../map/heat';
 import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
+import { UNREAD_REFRESH_MS } from '../config';
 import { totalUnread, useCommentStore } from '../store/commentStore';
 import { filterPins, useMapStore } from '../store/mapStore';
 import { readRememberedOverlayMaps, useOverlayStore } from '../store/overlayStore';
@@ -63,7 +64,7 @@ export default function MapPage() {
     sheetKind.current = sheet.kind;
   });
 
-  // 새 댓글 표시: 로그인했을 때와 앱 화면으로 돌아왔을 때 새로 받는다(로그아웃하면 비운다)
+  // 새 댓글 표시: 로그인했을 때, 앱 화면으로 돌아왔을 때, 화면이 보이는 동안 일정 간격마다 새로 받는다(로그아웃하면 비운다)
   useEffect(() => {
     if (!isAuthenticated) {
       useCommentStore.getState().reset();
@@ -76,7 +77,11 @@ export default function MapPage() {
       }
     };
     document.addEventListener('visibilitychange', refresh);
-    return () => document.removeEventListener('visibilitychange', refresh);
+    const timer = window.setInterval(refresh, UNREAD_REFRESH_MS);
+    return () => {
+      document.removeEventListener('visibilitychange', refresh);
+      window.clearInterval(timer);
+    };
   }, [isAuthenticated]);
 
   useEffect(() => {

@@ -54,6 +54,8 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      // 등록은 앱 코드(src/pwa/versionWatcher.ts)가 한다: 화면으로 돌아올 때·주기적으로 새 버전을 확인하고 배너로 알리기 위해서다.
+      injectRegister: false,
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: '도로 파티',
@@ -72,6 +74,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // 새 서비스 워커를 기다리게 두지 않고 바로 활성화해 통제권을 넘겨받는다. registerType 'autoUpdate' 는 플러그인의 등록 코드를 쓸 때만
+        // 이 둘을 켜 주는데, 등록을 앱 코드가 하므로(injectRegister: false) 직접 켠다. 빠뜨리면 새 서비스 워커가 앱을 완전히 닫을 때까지 대기한다.
+        skipWaiting: true,
+        clientsClaim: true,
         // 앱 셸(정적 파일)만 캐시한다. 지도·핀 같은 개인 데이터가 담긴 API 와 업로드 사진은 절대 캐시하지 않는다.
         navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/^\/party\/api\//],
