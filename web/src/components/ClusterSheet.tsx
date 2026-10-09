@@ -30,6 +30,7 @@ export default function ClusterSheet({ pins, mapNames, onPick, onClose }: Props)
                 <UserDot nickname={pin.authorNickname} color={pin.authorColor} />
                 <span className="truncate">· {mapNames.get(pin.mapId) ?? '지도'}</span>
                 {pin.rating !== null && <span className="shrink-0 text-amber-300">★ {pin.rating}</span>}
+                {pin.commentCount > 0 && <span className="shrink-0" aria-label={`댓글 ${pin.commentCount}개`}>💬 {pin.commentCount}</span>}
               </span>
             </button>
           </li>

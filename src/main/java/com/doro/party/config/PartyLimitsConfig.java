@@ -19,6 +19,7 @@ public class PartyLimitsConfig {
             int maxPinsPerMap,
             int maxTagsPerPin,
             int maxVisitsPerPin,
+            int maxCommentsPerPin,
             int maxPhotosPerPin,
             long maxPhotoBytes,
             int maxFriends,

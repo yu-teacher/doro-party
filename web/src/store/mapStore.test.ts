@@ -20,7 +20,7 @@ function map(id: string, pinCount = 0): PartyMap {
 function pin(id: string, mapId: string, overrides: Partial<Pin> = {}): Pin {
   return {
     id, mapId, createdBy: 'u', authorNickname: '작성자', authorColor: '#17BEBB', lat: 37.5, lng: 127, name: `핀 ${id}`, sharedMemo: null,
-    status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0,
+    status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0, commentCount: 0,
     createdAt: '', updatedAt: '', ...overrides,
   };
 }

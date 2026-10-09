@@ -34,6 +34,7 @@ public enum ErrorCode {
     MAP_NOT_FOUND(HttpStatus.NOT_FOUND, "MAP-404-01", "존재하지 않는 지도입니다."),
     PIN_NOT_FOUND(HttpStatus.NOT_FOUND, "PIN-404-01", "존재하지 않는 핀입니다."),
     VISIT_NOT_FOUND(HttpStatus.NOT_FOUND, "VISIT-404-01", "존재하지 않는 방문 기록입니다."),
+    COMMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "COMMENT-404-01", "존재하지 않는 댓글입니다."),
     PHOTO_NOT_FOUND(HttpStatus.NOT_FOUND, "PHOTO-404-01", "존재하지 않는 사진입니다."),
 
     // 409 Conflict

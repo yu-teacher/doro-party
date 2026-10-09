@@ -62,10 +62,11 @@ export interface Pin {
   rating: number | null;
   revisitIntent: RevisitIntent | null;
   tags: string[];
-  /** 방문 기록 수, 마지막 방문일(yyyy-MM-dd), 사진 수 */
+  /** 방문 기록 수, 마지막 방문일(yyyy-MM-dd), 사진 수, 댓글 수 */
   visitCount: number;
   lastVisitedOn: string | null;
   photoCount: number;
+  commentCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -79,6 +80,27 @@ export interface Visit {
   visitedOn: string;
   note: string | null;
   createdAt: string;
+}
+
+/** 핀에 남긴 댓글. 지도를 볼 수 있는 사람이면 누구나 보고 쓴다 */
+export interface PinComment {
+  id: string;
+  pinId: string;
+  userId: string;
+  authorNickname: string;
+  authorColor: string;
+  body: string;
+  createdAt: string;
+  /** 고친 적이 없으면 null */
+  editedAt: string | null;
+}
+
+/** 읽지 않은 댓글이 있는 핀(내가 꽂았거나 내가 댓글을 남긴 핀) */
+export interface UnreadPin {
+  mapId: string;
+  pinId: string;
+  pinName: string;
+  unread: number;
 }
 
 /** 쓴 사람에게만 보이는 핀 메모 */
@@ -127,6 +149,7 @@ export const LIMITS = {
   groupName: 30,
   username: { min: 3, max: 30 },
   visitNote: 500,
+  comment: 500,
   privateNote: 2000,
   /** 사진을 올리기 전에 줄이는 한 변의 최대 길이(px) */
   photoMaxEdge: 1600,

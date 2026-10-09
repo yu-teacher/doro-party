@@ -27,7 +27,7 @@ class RecommendationEngineTest {
 
     private static PinResponse pin(UUID author, String nickname, String name, double lat, double lng, PinStatus status, Integer rating, RevisitIntent revisit) {
         return new PinResponse(UUID.randomUUID(), MAP, author, nickname, "#E4572E", lat, lng, name, null, status, rating, revisit,
-                List.of(), 0, null, 0, null, null);
+                List.of(), 0, null, 0, 0, null, null);
     }
 
     private static PinResponse at(UUID author, String nickname, String name, double dLat, PinStatus status, Integer rating, RevisitIntent revisit) {

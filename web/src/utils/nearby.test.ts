@@ -20,7 +20,7 @@ function pin(partial: Partial<Pin> & { id: string }): Pin {
     tags: [],
     visitCount: 0,
     lastVisitedOn: null,
-    photoCount: 0,
+    photoCount: 0, commentCount: 0,
     createdAt: '2026-10-07T00:00:00Z',
     updatedAt: '2026-10-07T00:00:00Z',
     ...partial,

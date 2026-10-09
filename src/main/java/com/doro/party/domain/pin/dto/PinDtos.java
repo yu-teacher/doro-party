@@ -60,19 +60,20 @@ public final class PinDtos {
             long visitCount,
             LocalDate lastVisitedOn,
             long photoCount,
+            long commentCount,
             Instant createdAt,
             Instant updatedAt
     ) {
         public static PinResponse from(Pin pin, PinStats stats, PartyUser author) {
             return new PinResponse(pin.getId(), pin.getMapId(), pin.getCreatedBy(), author.getNickname(), author.getColor(), pin.getLat(), pin.getLng(),
                     pin.getName(), pin.getSharedMemo(), pin.getStatus(), pin.getRating(), pin.getRevisitIntent(),
-                    pin.getTags().stream().sorted().toList(), stats.visitCount(), stats.lastVisitedOn(), stats.photoCount(),
+                    pin.getTags().stream().sorted().toList(), stats.visitCount(), stats.lastVisitedOn(), stats.photoCount(), stats.commentCount(),
                     pin.getCreatedAt(), pin.getUpdatedAt());
         }
     }
 
-    /** 핀에 딸린 기록의 요약(방문 횟수·마지막 방문일·사진 수). */
-    public record PinStats(long visitCount, LocalDate lastVisitedOn, long photoCount) {
-        public static final PinStats EMPTY = new PinStats(0, null, 0);
+    /** 핀에 딸린 기록의 요약(방문 횟수·마지막 방문일·사진 수·댓글 수). */
+    public record PinStats(long visitCount, LocalDate lastVisitedOn, long photoCount, long commentCount) {
+        public static final PinStats EMPTY = new PinStats(0, null, 0, 0);
     }
 }

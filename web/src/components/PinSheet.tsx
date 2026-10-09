@@ -1,12 +1,14 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import type { Pin, RevisitIntent } from '../api/types';
+import { usePinComments } from '../hooks/usePinComments';
 import { usePinRecords } from '../hooks/usePinRecords';
 import { useAuthStore } from '../store/authStore';
 import { useMapStore } from '../store/mapStore';
 import { canPlacePins } from '../utils/mapRole';
 import { EMPTY_PIN_FORM, formValuesFromPin, toPinInput } from '../utils/pinForm';
 import type { PinFormValues } from '../utils/pinForm';
+import CommentThread from './CommentThread';
 import PhotoStrip from './PhotoStrip';
 import PinForm from './PinForm';
 import PrivateNoteBox from './PrivateNoteBox';
@@ -64,6 +66,7 @@ function ViewPin({ pin, onClose, readOnly = false, onOpenInMap }: ViewProps) {
   const privateNote = useMapStore((state) => state.privateNotes[pin.id]);
   const currentUserId = useAuthStore((state) => state.user?.id ?? null);
   const records = usePinRecords(pin.mapId, pin.id);
+  const pinComments = usePinComments(pin.mapId, pin.id);
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -137,6 +140,18 @@ function ViewPin({ pin, onClose, readOnly = false, onOpenInMap }: ViewProps) {
           canDelete={(visit) => !readOnly && (isMapOwner || visit.userId === currentUserId)}
           onAdd={records.addVisit}
           onDelete={records.removeVisit}
+        />
+
+        {/* 댓글은 지도를 볼 수 있으면 누구나 쓴다: 겹쳐보기에서 연 핀(readOnly)에서도, 보기 권한만 있어도 된다 */}
+        <CommentThread
+          comments={pinComments.comments}
+          loading={pinComments.loading}
+          loadError={pinComments.error}
+          currentUserId={currentUserId}
+          canDelete={(comment) => comment.userId === currentUserId || pin.createdBy === currentUserId || isMapOwner}
+          onAdd={pinComments.add}
+          onEdit={pinComments.edit}
+          onDelete={pinComments.remove}
         />
 
         {!readOnly && (

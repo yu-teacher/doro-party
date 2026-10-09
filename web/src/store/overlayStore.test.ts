@@ -10,7 +10,7 @@ const api = vi.mocked(socialApi);
 function pin(id: string, mapId: string, createdBy: string): Pin {
   return {
     id, mapId, createdBy, authorNickname: createdBy, authorColor: '#E4572E', lat: 37.5, lng: 127, name: `핀 ${id}`, sharedMemo: null,
-    status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0, createdAt: '', updatedAt: '',
+    status: 'WISH', rating: null, revisitIntent: null, tags: [], visitCount: 0, lastVisitedOn: null, photoCount: 0, commentCount: 0, createdAt: '', updatedAt: '',
   };
 }
 

@@ -74,6 +74,8 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 | `pin_tags` | pin_id, tag |
 | `pin_photos` | id, pin_id, uploaded_by, object_key, content_type(서버가 판별), size_bytes |
 | `visit_logs` | id, pin_id, user_id, visited_on, note |
+| `pin_comments` | id, pin_id, user_id, body(≤500), created_at, edited_at |
+| `pin_comment_reads` | (pin_id, user_id), last_read_at — 이 시각까지의 댓글을 읽었다는 표시 |
 | `party_users` | id(Doro 사용자 ID), username(친구가 나를 찾는 이름, 본인이 수정), nickname, color — 이메일은 저장하지 않는다 |
 | `friendships` | 정렬된 (user_low_id, user_high_id) 유니크, requester_id, status(PENDING/ACCEPTED) |
 | `friend_invites` | owner_id 당 하나, code_hash, code_enc(암호화), expires_at |
@@ -130,6 +132,7 @@ type party_map {
 | 지도 | `POST/GET /maps`, `GET/PATCH/DELETE /maps/{id}`, `PUT/DELETE /maps/{id}/shares/{userId}` |
 | 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
 | 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
+| 핀 댓글 | `GET/POST /maps/{id}/pins/{pinId}/comments`, `PATCH/DELETE .../comments/{commentId}`, `POST .../comments/read {upTo}`(읽음 표시), `GET /comments/unread`(새 댓글이 달린 내 핀) |
 | 사적 메모 | `GET /maps/{id}/private-notes`(내 것 전체), `PUT/DELETE /maps/{id}/pins/{pinId}/private-note` |
 | 사진 | `POST/GET /maps/{id}/pins/{pinId}/photos`(multipart `file`), `GET .../photos/{photoId}/content`, `DELETE .../photos/{photoId}` |
 | 프로필 | `GET/PATCH /me`(닉네임·사용자명) |
@@ -186,6 +189,14 @@ presigned URL 직접 업로드 대신 이 방식을 고른 이유: 서버가 파
 - 내가 볼 수 있는 모든 지도(내 지도 + 공유받은 지도)의 핀을 **내 위치에서 가까운 순**으로 보여 주는 시트. 서버 변경 없이 기존 `GET /overlay/pins` 를 지도 수 상한(20)씩 나눠 불러와 합친다.
 - 내 위치는 시트를 열 때 **한 번만** 확인하고(계속 추적하지 않음) 거리(하버사인)는 폰 안에서만 계산한다. **위치를 서버로 보내지 않는다.**
 - 반경(500m/1km/3km/전체), 상태(가고 싶어요/다녀왔어요), 태그로 거르고, 50개씩 끊어 보여 준다. 항목을 누르면 그 핀의 지도를 열고 상세를 보여 준다.
+
+### 핀 댓글
+- **누가 쓰나**: 지도를 볼 수 있는 사람(viewer 이상) 누구나. 핀을 못 꽂는 보기 전용 사람도 "웨이팅 길어요" 같은 말을 남길 수 있어야 앱 안에서 소통이 되기 때문이다. Guard 에 새 관계를 만들지 않고 기존 `party_map#viewer` 를 그대로 쓴다. 겹쳐보기에서 연 핀에도 쓸 수 있다.
+- **고치기·지우기**: 고치는 것은 쓴 사람만. 지우는 것은 쓴 사람, 그 핀을 꽂은 사람, 지도 주인. 지도 주인이라도 남의 글을 바꿔 쓸 수는 없다.
+- **새 댓글(읽지 않음)**: 알림을 받는 대상은 **그 핀을 꽂은 사람과 그 핀에 댓글을 남긴 사람**뿐이다. 지도를 볼 수 있다고 모든 핀의 알림을 받게 하면 금방 소음이 된다. 읽음 표시는 핀·사용자 한 쌍에 시각 하나(`last_read_at`)이고, 클라이언트가 **화면에 본 마지막 댓글의 시각(`upTo`)** 을 보내면 `GREATEST` 로 앞으로만 움직인다. 서버 시계로 "지금" 을 찍으면 읽기와 쓰기가 겹칠 때 안 본 댓글이 읽힌 것으로 처리될 수 있어서다. 내가 쓴 댓글은 읽음 표시와 상관없이 새 댓글로 세지 않는다. 시각은 DB 정밀도(마이크로초)에 맞춰 저장해 비교가 어긋나지 않게 한다.
+- **볼 수 없게 된 지도**: 새 댓글 목록은 지도마다 Guard 로 viewer 를 다시 확인하고 빠진 지도의 핀은 제외한다(핀 이름이 새지 않는다). Guard 가 응답하지 못하면 "없음" 으로 오해하지 않고 503 으로 전파한다. 한 번에 최대 50개 핀.
+- **상한과 삭제**: 핀마다 댓글 최대 500개(`PARTY_MAX_COMMENTS_PER_PIN`, 핀 행을 잠그고 검사). 핀·지도를 지우면 FK cascade 로 댓글과 읽음 표시도 함께 지워진다.
+- **범위 밖(의도적)**: 대댓글·멘션·이모지 반응, 푸시 알림, 실시간 갱신. 앱을 열 때·핀을 닫을 때·화면으로 돌아올 때 새로 받아 온다.
 
 ## 8. 마일스톤
 

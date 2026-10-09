@@ -1,7 +1,7 @@
-import { ListOrdered, LocateFixed, MapPinPlus } from 'lucide-react';
+import { ListOrdered, LocateFixed, MapPinPlus, MessageCircle } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { Pin, RecommendedPlace } from '../api/types';
+import type { Pin, RecommendedPlace, UnreadPin } from '../api/types';
 import ClusterSheet from '../components/ClusterSheet';
 import FilterBar from '../components/FilterBar';
 import MapFormSheet from '../components/MapFormSheet';
@@ -12,6 +12,7 @@ import OverlayBar from '../components/OverlayBar';
 import OverlayMapsSheet from '../components/OverlayMapsSheet';
 import PinSheet from '../components/PinSheet';
 import NearbySheet from '../components/NearbySheet';
+import UnreadCommentsSheet from '../components/UnreadCommentsSheet';
 import PlacementBar from '../components/PlacementBar';
 import RecommendationsSheet from '../components/RecommendationsSheet';
 import SharedMapSheet from '../components/SharedMapSheet';
@@ -19,6 +20,7 @@ import { toHeatSpots } from '../map/heat';
 import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
+import { totalUnread, useCommentStore } from '../store/commentStore';
 import { filterPins, useMapStore } from '../store/mapStore';
 import { readRememberedOverlayMaps, useOverlayStore } from '../store/overlayStore';
 import { LOCATE_TIMEOUT_MS, LOCATE_UNSUPPORTED, locateErrorMessage } from '../utils/geolocation';
@@ -37,7 +39,8 @@ type Sheet =
   | { kind: 'overlay-maps' }
   | { kind: 'recommendations' }
   | { kind: 'cluster'; pins: Pin[] }
-  | { kind: 'nearby' };
+  | { kind: 'nearby' }
+  | { kind: 'comments' };
 
 const NO_SHEET: Sheet = { kind: 'none' };
 export default function MapPage() {
@@ -45,6 +48,8 @@ export default function MapPage() {
   const { maps, mapsLoaded, selectedMapId, pins, pinsLoading, error, statusFilter, tagFilter } = useMapStore();
   const { loadMaps, selectMap, setStatusFilter, setTagFilter, reset } = useMapStore.getState();
   const overlay = useOverlayStore();
+  const unreadPins = useCommentStore((state) => state.unread);
+  const unreadTotal = totalUnread(unreadPins);
   const location = useLocation();
   const navigate = useNavigate();
   const [sheet, setSheet] = useState<Sheet>(NO_SHEET);
@@ -57,6 +62,22 @@ export default function MapPage() {
   useEffect(() => {
     sheetKind.current = sheet.kind;
   });
+
+  // 새 댓글 표시: 로그인했을 때와 앱 화면으로 돌아왔을 때 새로 받는다(로그아웃하면 비운다)
+  useEffect(() => {
+    if (!isAuthenticated) {
+      useCommentStore.getState().reset();
+      return undefined;
+    }
+    void useCommentStore.getState().loadUnread();
+    const refresh = () => {
+      if (document.visibilityState === 'visible') {
+        void useCommentStore.getState().loadUnread();
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -120,6 +141,17 @@ export default function MapPage() {
   const pickNearby = (pin: Pin) => {
     // 다른 지도의 핀이면 지도가 바뀌고 핀이 불러와진 뒤 "그 지도 전체 보기"로 맞춰지므로, 이동은 그 다음에 한다
     void openPinInItsMap(pin).then(() => setPanTo({ lat: pin.lat, lng: pin.lng, nonce: Date.now(), aboveSheet: true }));
+  };
+
+  /** 새 댓글이 달린 핀을 누르면 그 핀이 속한 지도를 열고 핀 상세(댓글)를 보여 준다. */
+  const pickUnread = async (item: UnreadPin) => {
+    useOverlayStore.getState().close();
+    await selectMap(item.mapId);
+    const found = useMapStore.getState().pins.find((pin) => pin.id === item.pinId);
+    setSheet({ kind: 'pin', pinId: item.pinId });
+    if (found) {
+      setPanTo({ lat: found.lat, lng: found.lng, nonce: Date.now(), aboveSheet: true });
+    }
   };
 
   /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
@@ -302,6 +334,24 @@ export default function MapPage() {
             <MapPinPlus size={20} />
           </button>
         )}
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => {
+              setPlacing(null);
+              setSheet({ kind: 'comments' });
+            }}
+            className="relative rounded-full bg-slate-900/95 p-3 text-slate-100 shadow-lg ring-1 ring-slate-700 hover:bg-slate-800"
+            aria-label={unreadTotal > 0 ? `새 댓글 ${unreadTotal}개 보기` : '새 댓글 보기'}
+          >
+            <MessageCircle size={20} />
+            {unreadTotal > 0 && (
+              <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-500 px-1 text-center text-[11px] font-bold leading-5 text-white">
+                {unreadTotal > 99 ? '99+' : unreadTotal}
+              </span>
+            )}
+          </button>
+        )}
         {isAuthenticated && maps.length > 0 && (
           <button
             type="button"
@@ -362,6 +412,7 @@ export default function MapPage() {
           onClose={closeSheet}
         />
       )}
+      {sheet.kind === 'comments' && <UnreadCommentsSheet unread={unreadPins} mapNames={mapNames} onPick={(item) => void pickUnread(item)} onClose={closeSheet} />}
       {sheet.kind === 'nearby' && <NearbySheet maps={maps} onPick={pickNearby} onClose={closeSheet} />}
       {sheet.kind === 'cluster' && (
         <ClusterSheet pins={sheet.pins} mapNames={mapNames} onPick={(pin) => setSheet({ kind: 'pin', pinId: pin.id })} onClose={closeSheet} />

@@ -95,6 +95,7 @@ party:
     max-pins-per-map: ${PARTY_MAX_PINS_PER_MAP:2000}
     max-tags-per-pin: ${PARTY_MAX_TAGS_PER_PIN:10}
     max-visits-per-pin: ${PARTY_MAX_VISITS_PER_PIN:200}
+    max-comments-per-pin: ${PARTY_MAX_COMMENTS_PER_PIN:500}
     max-photos-per-pin: ${PARTY_MAX_PHOTOS_PER_PIN:10}
     # 사진 한 장의 최대 크기(바이트). 기본 8MB. 앱에서 올리기 전에 줄여 보내므로 보통은 훨씬 작다.
     max-photo-bytes: ${PARTY_MAX_PHOTO_BYTES:8388608}
