@@ -19,3 +19,24 @@ body {
   /* 지도를 끌 때 페이지가 같이 당겨지거나 새로고침되는 것을 막는다 */
   overscroll-behavior: none;
 }
+
+/*
+ * 터치 화면(폰·태블릿)에서만 적용한다. 마우스를 쓰는 데스크톱 화면은 그대로다.
+ *
+ * 1) 입력창 글자는 16px 이상이어야 한다. 그보다 작으면 iOS Safari 가 입력창을 누를 때 화면을 확대해
+ *    레이아웃이 틀어지고 사용자가 직접 축소해야 한다. (utilities 보다 이 규칙이 나중이라 text-sm 을 이긴다)
+ * 2) 손가락으로 누르는 버튼은 최소 36px 높이를 확보한다. 24~30px 짜리 작은 버튼(수락·거절·끊기·보기 등)은 잘못 눌리기 쉽다.
+ *    크기가 의미인 것은 제외한다: 스위치(모양이 정해져 있다), 태그 칩 안의 지우기 버튼(칩이 커진다).
+ */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  button:not([role='switch']):not([aria-label$='태그 지우기']),
+  select {
+    min-height: 36px;
+  }
+}
