@@ -115,9 +115,26 @@ wait_healthy() {
 
 # 게이트웨이(nginx)는 upstream 컨테이너의 IP 를 시작할 때 한 번만 찾는다. 컨테이너가 새로 만들어져 IP 가 바뀌면 옛 주소로 계속 연결해 502 가 나므로,
 # 컨테이너를 만든 뒤에는 설정을 검사하고 reload 해서 주소를 다시 찾게 한다(설정은 바꾸지 않고, 진행 중인 요청은 끊지 않는다).
+# reload 했다는 것만으로는 부족하다: 게이트웨이를 거쳐 웹(party-web)과 API(party-api) 두 upstream 이 실제로 200 을 주는지까지 확인한다.
 reload_gateway() {
-  docker exec "$GATEWAY_CONTAINER" nginx -t >/dev/null 2>&1 && docker exec "$GATEWAY_CONTAINER" nginx -s reload >/dev/null 2>&1 \
-    && log "  게이트웨이($GATEWAY_CONTAINER) reload 완료: 새 컨테이너 주소를 다시 찾는다"
+  local base="${GATEWAY_CHECK_BASE:-https://127.0.0.1}" path code i
+  docker exec "$GATEWAY_CONTAINER" nginx -t >/dev/null 2>&1 || { log "ERROR: 게이트웨이 설정 검증(nginx -t) 실패 - reload 하지 않는다"; return 1; }
+  docker exec "$GATEWAY_CONTAINER" nginx -s reload >/dev/null 2>&1 || { log "ERROR: 게이트웨이 reload 실패"; return 1; }
+  log "  게이트웨이($GATEWAY_CONTAINER) reload 완료: 새 컨테이너 주소를 다시 찾는다"
+  # 웹 화면(party-web)과 로그인 상태 API(party-api, 로그인하지 않아도 200)
+  for path in /party/ /party/api/v1/bff/session; do
+    code=""
+    for i in $(seq 1 "${GATEWAY_CHECK_TRIES:-15}"); do
+      code="$(curl -sk -o /dev/null -w '%{http_code}' -m 5 "$base$path" || true)"
+      [ "$code" = 200 ] && break
+      sleep "${GATEWAY_CHECK_SLEEP:-2}"
+    done
+    if [ "$code" != 200 ]; then
+      log "ERROR: 게이트웨이를 거친 $path 응답이 200 이 아니다(마지막: ${code:-없음})"
+      return 1
+    fi
+  done
+  log "  게이트웨이 경유 응답 확인: /party/ 와 /party/api/v1/bff/session 이 200"
 }
 
 log "== 반영 (compose 파일과 .env 는 보내지 않는다) =="
@@ -128,7 +145,7 @@ apply_release "$PARTY_SRC/$JAR_REL" "$PARTY_SRC/web/dist"
 
 log "== 헬스체크 (최대 ${HEALTH_TIMEOUT_SEC}s) =="
 if wait_healthy; then
-  reload_gateway || die "게이트웨이 reload 에 실패했다. 서비스는 정상이지만 /party/ 가 502 일 수 있다: docker exec $GATEWAY_CONTAINER nginx -t && docker exec $GATEWAY_CONTAINER nginx -s reload"
+  reload_gateway || die "앱은 정상이지만 게이트웨이가 새 컨테이너를 가리키지 못한다(/party/ 가 502 일 수 있다). 수동 확인 필요: docker exec $GATEWAY_CONTAINER nginx -s reload"
   prune_old_releases || log "경고: 오래된 산출물 정리에 실패했다(배포는 성공)"
   log "완료. 롤백 지점: $SNAP, 이미지 태그 doro-party-rollback:{api,web}-$TS"
   exit 0

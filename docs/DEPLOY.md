@@ -43,7 +43,7 @@ ssh <서버> 'bash -s -- --apply --refresh'            < scripts/apply-gateway-p
 - `/party/api/v1/bff/session` 응답이 로그인 상태를 반영한다.
 - 기존 서비스(블로그 `/`, 포털, 메뉴)가 그대로 동작한다.
 
-**배포 뒤 게이트웨이 reload**: 게이트웨이(nginx)는 upstream 컨테이너의 IP 를 시작·reload 때만 찾는다. 배포로 `party-api`/`party-web` 컨테이너가 새로 만들어져 IP 가 바뀌면 게이트웨이가 옛 주소로 연결해 `/party/` 가 502 가 된다. `deploy-on-server.sh` 는 헬스체크가 통과하면 `nginx -t` 후 `nginx -s reload` 를 하고(설정은 바꾸지 않고 진행 중인 요청은 끊지 않는다), 실패하면 배포를 실패로 표시한다. 컨테이너 이름이 다르면 `GATEWAY_CONTAINER` 로 지정한다. 수동 복구: `docker exec doro-gateway nginx -s reload`.
+**배포 뒤 게이트웨이 reload**: 게이트웨이(nginx)는 upstream 컨테이너의 IP 를 시작·reload 때만 찾는다. 배포로 `party-api`/`party-web` 컨테이너가 새로 만들어져 IP 가 바뀌면 게이트웨이가 옛 주소로 연결해 `/party/` 가 502 가 된다. `deploy-on-server.sh` 는 헬스체크가 통과하면 `nginx -t` 후 `nginx -s reload` 를 하고(설정은 바꾸지 않고 진행 중인 요청은 끊지 않는다), 이어서 게이트웨이를 거친 `/party/`(웹)와 `/party/api/v1/bff/session`(API)이 200 인지 확인한다(`GATEWAY_CHECK_TRIES`×`GATEWAY_CHECK_SLEEP`초 재시도). 하나라도 실패하면 배포를 실패로 표시한다(롤백은 하지 않는다). 컨테이너 이름이 다르면 `GATEWAY_CONTAINER` 로 지정한다. 수동 복구: `docker exec doro-gateway nginx -s reload`.
 
 ## 5. 롤백
 이전 jar 와 `web/dist` 를 보관해 두었다가 복원 후 재빌드한다. 게이트웨이는 백업한 `nginx.conf` 로 되돌려 reload.
