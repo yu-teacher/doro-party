@@ -39,4 +39,10 @@ body {
   select {
     min-height: 36px;
   }
+
+  /* 아이콘만 있는 링크(수정·지도 보기 등)도 손가락으로 누를 수 있게 */
+  a[href] {
+    min-height: 32px;
+    min-width: 32px;
+  }
 }

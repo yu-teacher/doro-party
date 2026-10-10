@@ -50,7 +50,7 @@ function InviteContent({ code }: { code: string }) {
   const { inviter, self, alreadyFriends } = preview.data;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-      <div className="rounded-2xl bg-slate-800/70 px-6 py-5">
+      <div className="max-w-full rounded-2xl bg-slate-800/70 px-6 py-5">
         <p className="mb-2 text-sm text-slate-400">친구 초대</p>
         <UserDot nickname={inviter.nickname} color={inviter.color} />
       </div>
@@ -58,7 +58,7 @@ function InviteContent({ code }: { code: string }) {
       {!self && alreadyFriends && <p className="text-sm text-teal-300">이미 친구예요.</p>}
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
       {!self && !alreadyFriends && (
-        <button type="button" disabled={accepting} onClick={() => void accept()} className="rounded-lg bg-teal-500 px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-60">
+        <button type="button" disabled={accepting} onClick={() => void accept()} className="max-w-full break-all rounded-lg bg-teal-500 px-6 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-60">
           {accepting ? '연결하는 중…' : `${inviter.nickname}님과 친구 되기`}
         </button>
       )}

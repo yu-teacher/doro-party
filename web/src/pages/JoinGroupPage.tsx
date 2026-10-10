@@ -49,10 +49,10 @@ function JoinContent({ code }: { code: string }) {
   const { groupName, memberCount, ownerNickname, alreadyMember, full } = preview.data;
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
-      <div className="rounded-2xl bg-slate-800/70 px-6 py-5">
+      <div className="max-w-full rounded-2xl bg-slate-800/70 px-6 py-5">
         <p className="mb-1 text-sm text-slate-400">모임 초대</p>
-        <p className="text-lg font-bold text-slate-100">{groupName}</p>
-        <p className="mt-1 text-xs text-slate-500">방장 {ownerNickname} · 멤버 {memberCount}명</p>
+        <p className="break-words text-lg font-bold text-slate-100">{groupName}</p>
+        <p className="mt-1 break-words text-xs text-slate-500">방장 {ownerNickname} · 멤버 {memberCount}명</p>
       </div>
       {alreadyMember && <p className="text-sm text-teal-300">이미 이 모임의 멤버예요.</p>}
       {!alreadyMember && full && <p className="text-sm text-rose-300">모임 정원이 가득 찼어요.</p>}

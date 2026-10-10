@@ -32,6 +32,9 @@ jobs:
       - run: npm run lint
       - run: npx tsc -b
       - run: npm test
+      # 모바일 레이아웃 회귀 테스트: 실제 Chromium 으로 폰 4가지 크기(320·375·414 세로, 812x375 가로)에서 가로 넘침·글자 잘림·터치 영역·입력 글꼴을 측정한다.
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:mobile
       - run: npm run build
 
   backend:
