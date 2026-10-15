@@ -40,6 +40,10 @@ public abstract class PartyHttpTestBase {
     protected static final String COOKIE = "doro_party_session";
     protected static final String CSRF = "X-Party-Csrf";
     protected static final String CLIENT_ID = "doro-party";
+    protected static final String LOGIN_COOKIE = "doro_party_login";
+
+    /** 로그인 시작 때 브라우저가 받은 '로그인 진행 중' 쿠키 값(state 별). 콜백 도우미가 같은 브라우저처럼 되돌려 보낸다. */
+    private static final java.util.Map<String, String> LOGIN_COOKIES = new java.util.concurrent.ConcurrentHashMap<>();
 
     protected static final FakeIam IAM = startIam();
 
@@ -74,6 +78,7 @@ public abstract class PartyHttpTestBase {
         jwks.registerKey(FakeIam.KID, IAM.publicKey());
         IAM.rejectRefresh = false;
         IAM.unavailable = false;
+        IAM.tooManyRequests = false;
         IAM.accessTtlSeconds = 900;
     }
 
@@ -154,17 +159,37 @@ public abstract class PartyHttpTestBase {
         MockHttpServletResponse response = mockMvc.perform(request).andExpect(status().isFound()).andReturn().getResponse();
         String location = response.getHeader("Location");
         var params = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
-        return new StartedLogin(params.getFirst("state"), params.getFirst("code_challenge"), location);
+        String state = params.getFirst("state");
+        for (String header : response.getHeaders("Set-Cookie")) {
+            if (header.startsWith(LOGIN_COOKIE + "=")) {
+                LOGIN_COOKIES.put(state, header.substring((LOGIN_COOKIE + "=").length(), header.indexOf(';')));
+            }
+        }
+        return new StartedLogin(state, params.getFirst("code_challenge"), location);
     }
 
     protected MockHttpServletResponse callback(String code, String state) throws Exception {
-        return mockMvc.perform(get("/api/v1/bff/callback").param("code", code).param("state", state)).andReturn().getResponse();
+        var request = get("/api/v1/bff/callback").param("code", code).param("state", state);
+        String loginCookie = state == null ? null : LOGIN_COOKIES.get(state);
+        if (loginCookie != null) {
+            request.cookie(new Cookie(LOGIN_COOKIE, loginCookie));
+        }
+        return mockMvc.perform(request).andReturn().getResponse();
+    }
+
+    protected String loginCookieOf(String state) {
+        return LOGIN_COOKIES.get(state);
     }
 
     protected String cookieValueOf(MockHttpServletResponse response) {
         String header = response.getHeader("Set-Cookie");
+        for (String h : response.getHeaders("Set-Cookie")) {
+            if (h.startsWith(COOKIE + "=")) {
+                return h.substring((COOKIE + "=").length(), h.indexOf(';'));
+            }
+        }
         assertThat(header).as("세션 쿠키가 발급되어야 한다").isNotNull().startsWith(COOKIE + "=");
-        return header.substring((COOKIE + "=").length(), header.indexOf(';'));
+        return null;
     }
 
     /** 로그인 전체를 수행하고 세션 쿠키 값을 돌려준다. */

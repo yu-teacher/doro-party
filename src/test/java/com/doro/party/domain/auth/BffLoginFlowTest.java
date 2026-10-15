@@ -1,5 +1,6 @@
 package com.doro.party.domain.auth;
 
+import com.hunnit_beasts.doro.sdk.bff.BffAuthService;
 import com.doro.party.domain.auth.repository.AuthSessionRepository;
 import com.doro.party.domain.auth.repository.LoginAttemptRepository;
 import com.doro.party.support.FakeIam;
@@ -68,7 +69,7 @@ class BffLoginFlowTest extends PartyHttpTestBase {
 
         assertThat(response.getStatus()).isEqualTo(302);
         assertThat(response.getHeader("Location")).isEqualTo("/party/maps/42");
-        String setCookie = response.getHeader("Set-Cookie");
+        String setCookie = response.getHeaders("Set-Cookie").stream().filter(h -> h.startsWith(COOKIE + "=")).findFirst().orElseThrow();
         assertThat(setCookie).contains("HttpOnly").contains("Secure").contains("SameSite=Lax").contains("Path=/party");
         String cookieValue = cookieValueOf(response);
         var stored = sessions.findBySessionHash(BffAuthService.sha256Hex(cookieValue)).orElseThrow();
@@ -86,7 +87,7 @@ class BffLoginFlowTest extends PartyHttpTestBase {
         StartedLogin started = startLogin(null);
         String code = IAM.issueCode(UUID.randomUUID(), newEmail(), started.challenge(), "doro-party");
 
-        assertThat(callback(code, started.state()).getHeader("Set-Cookie")).isNotNull();
+        assertThat(cookieValueOf(callback(code, started.state()))).isNotNull();
         MockHttpServletResponse replay = callback(IAM.issueCode(UUID.randomUUID(), newEmail(), started.challenge(), "doro-party"), started.state());
 
         assertThat(replay.getHeader("Location")).isEqualTo("/party/?login_error=failed");
@@ -100,7 +101,7 @@ class BffLoginFlowTest extends PartyHttpTestBase {
                 .isEqualTo("/party/?login_error=failed");
         MockHttpServletResponse denied = mockMvc.perform(get("/api/v1/bff/callback").param("error", "access_denied")).andReturn().getResponse();
         assertThat(denied.getHeader("Location")).isEqualTo("/party/?login_error=cancelled");
-        assertThat(denied.getHeader("Set-Cookie")).isNull();
+        assertThat(denied.getHeaders("Set-Cookie")).noneMatch(h -> h.startsWith(COOKIE + "="));
     }
 
     @Test
@@ -113,8 +114,8 @@ class BffLoginFlowTest extends PartyHttpTestBase {
         MockHttpServletResponse response = callback(foreignCode, started.state());
 
         assertThat(response.getHeader("Location")).isEqualTo("/party/?login_error=failed");
-        // 실패하면 쿠키를 발급하지 않고, 이전에 남아 있을 수 있는 쿠키를 지운다(값이 비고 Max-Age=0)
-        assertThat(response.getHeader("Set-Cookie")).startsWith("doro_party_session=;").contains("Max-Age=0");
+        // 실패하면 세션 쿠키를 발급하지 않는다. 이미 로그인한 사용자의 세션 쿠키도 지우지 않고(강제 로그아웃 방지), '로그인 진행 중' 쿠키만 비운다
+        assertThat(response.getHeaders("Set-Cookie")).noneMatch(h -> h.startsWith(COOKIE + "=")).anyMatch(h -> h.startsWith(LOGIN_COOKIE + "=;"));
     }
 
     @Test
@@ -309,7 +310,7 @@ class BffLoginFlowTest extends PartyHttpTestBase {
         String code = IAM.issueCode(userId, newEmail(), started.challenge(), "doro-party");
 
         MockHttpServletResponse response = mockMvc.perform(get("/api/v1/bff/callback").param("code", code).param("state", started.state())
-                .cookie(session(first))).andReturn().getResponse();
+                .cookie(session(first), new Cookie(LOGIN_COOKIE, loginCookieOf(started.state())))).andReturn().getResponse();
 
         assertThat(cookieValueOf(response)).isNotEqualTo(first);
         assertThat(sessions.findBySessionHash(BffAuthService.sha256Hex(first))).isEmpty();

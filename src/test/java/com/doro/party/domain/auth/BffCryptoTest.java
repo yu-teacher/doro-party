@@ -1,5 +1,6 @@
 package com.doro.party.domain.auth;
 
+import com.hunnit_beasts.doro.sdk.bff.BffCrypto;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -8,7 +9,7 @@ import java.util.Base64;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class SessionCryptoTest {
+class BffCryptoTest {
 
     private static String key(int bytes, int fill) {
         byte[] raw = new byte[bytes];
@@ -16,7 +17,7 @@ class SessionCryptoTest {
         return Base64.getEncoder().encodeToString(raw);
     }
 
-    private final SessionCrypto crypto = new SessionCrypto(key(32, 7));
+    private final BffCrypto crypto = new BffCrypto(key(32, 7));
 
     @Test
     @DisplayName("암호화한 값은 평문을 담지 않고 복호화하면 원래 값이 된다")
@@ -40,7 +41,7 @@ class SessionCryptoTest {
         String tampered = stored.substring(0, stored.length() - 4) + (stored.endsWith("AAAA") ? "BBBB" : "AAAA");
 
         assertThatThrownBy(() -> crypto.decrypt(tampered)).isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new SessionCrypto(key(32, 9)).decrypt(stored)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new BffCrypto(key(32, 9)).decrypt(stored)).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> crypto.decrypt("plain-text")).isInstanceOf(IllegalStateException.class);
         assertThatThrownBy(() -> crypto.decrypt(null)).isInstanceOf(IllegalStateException.class);
     }
@@ -48,7 +49,7 @@ class SessionCryptoTest {
     @Test
     @DisplayName("키는 base64 32바이트여야 한다 (기동 시 바로 실패)")
     void keyMustBe32Bytes() {
-        assertThatThrownBy(() -> new SessionCrypto(key(16, 1))).isInstanceOf(IllegalStateException.class).hasMessageContaining("32바이트");
-        assertThatThrownBy(() -> new SessionCrypto("not base64 !!!")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new BffCrypto(key(16, 1))).isInstanceOf(IllegalStateException.class).hasMessageContaining("32바이트");
+        assertThatThrownBy(() -> new BffCrypto("not base64 !!!")).isInstanceOf(IllegalStateException.class);
     }
 }

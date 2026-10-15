@@ -86,6 +86,8 @@ party:
     cookie-secure: ${PARTY_COOKIE_SECURE:true}
     # 웹이 마운트된 하위 경로. 세션 쿠키 Path 와 로그인 후 이동 경로의 접두사. 게이트웨이가 /party 를 떼고 전달하므로 API 경로는 /api/v1 그대로다.
     web-base-path: ${PARTY_WEB_BASE_PATH:/party}
+    # 세션 쿠키 Path. web-base-path 와 같은 값(같은 환경변수)을 써서 하위 경로에만 쿠키가 가게 한다.
+    cookie-path: ${PARTY_WEB_BASE_PATH:/party}
     # DB 에 저장하는 토큰을 암호화하는 키(base64 32바이트). 기본값 없음: openssl rand -base64 32
     session-encryption-key: ${PARTY_SESSION_KEY}
 
