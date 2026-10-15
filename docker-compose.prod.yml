@@ -28,6 +28,8 @@ services:
       PARTY_OAUTH_CLIENT_ID: ${PARTY_OAUTH_CLIENT_ID:-doro-party}
       PARTY_OAUTH_AUTHORIZE_URL: ${PARTY_OAUTH_AUTHORIZE_URL:?PARTY_OAUTH_AUTHORIZE_URL must be set in .env}
       PARTY_OAUTH_REDIRECT_URI: ${PARTY_OAUTH_REDIRECT_URI:?PARTY_OAUTH_REDIRECT_URI must be set in .env}
+      # embedded(기본): 로그인·세션을 이 서비스가 한다. gateway: 별도 BFF(doro-bff)가 하고 게이트웨이가 Bearer 를 붙여 준다(docs/BFF.md).
+      PARTY_AUTH_MODE: ${PARTY_AUTH_MODE:-embedded}
       PARTY_SESSION_KEY: ${PARTY_SESSION_KEY:?PARTY_SESSION_KEY must be set in .env}
     networks:
       - doro-network

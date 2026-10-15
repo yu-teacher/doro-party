@@ -9,6 +9,7 @@ import com.hunnit_beasts.doro.sdk.bff.BffLoginAttemptStore;
 import com.hunnit_beasts.doro.sdk.bff.BffSession;
 import com.hunnit_beasts.doro.sdk.bff.BffSessionStore;
 import lombok.RequiredArgsConstructor;
+import com.doro.party.config.ConditionalOnEmbeddedBff;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +19,7 @@ import java.util.UUID;
 
 /** SDK BFF 의 저장소 계약({@link BffSessionStore}, {@link BffLoginAttemptStore})을 도로 파티 DB(JPA)로 구현한다. 메서드마다 짧은 트랜잭션이다. */
 @Component
+@ConditionalOnEmbeddedBff
 @RequiredArgsConstructor
 public class PartyBffStores implements BffSessionStore, BffLoginAttemptStore {
 

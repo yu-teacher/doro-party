@@ -33,8 +33,17 @@ public class BffSessionController {
     @GetMapping("/session")
     public ResponseEntity<ApiResponse<SessionResponse>> session(@CurrentDoroUser DoroUser doroUser) {
         SessionResponse body = (doroUser != null && doroUser.isAuthenticated())
-                ? new SessionResponse(true, userService.getProfileById(doroUser.userId()), doroUser.role())
+                ? new SessionResponse(true, profileOf(doroUser), doroUser.role())
                 : new SessionResponse(false, null, null);
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(ApiResponse.success(body));
+    }
+
+    /**
+     * 사용자 행이 없으면 만든다. embedded 모드에서는 로그인 직후 훅이 이미 만들었고, gateway 모드(로그인을 별도 BFF 가 처리)에서는
+     * 로그인 후 첫 화면이 이 조회라서 여기서 만든다(이미 있으면 읽기만 한다).
+     */
+    private UserProfileResponse profileOf(DoroUser doroUser) {
+        userService.getOrCreateUser(doroUser);
+        return userService.getProfileById(doroUser.userId());
     }
 }
