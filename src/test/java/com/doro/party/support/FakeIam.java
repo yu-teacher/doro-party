@@ -35,6 +35,8 @@ public final class FakeIam implements AutoCloseable {
     public volatile String lastRevokedToken;
     public volatile boolean rejectRefresh;
     public volatile boolean unavailable;
+    /** true 면 토큰 엔드포인트가 429(요청 과다)로 답한다. */
+    public volatile boolean tooManyRequests;
     public volatile long accessTtlSeconds = 900;
 
     public FakeIam() throws Exception {
@@ -46,6 +48,10 @@ public final class FakeIam implements AutoCloseable {
             Map<String, String> form = readForm(exchange.getRequestBody().readAllBytes());
             if (unavailable) {
                 respond(exchange, 503, "{}");
+                return;
+            }
+            if (tooManyRequests) {
+                respond(exchange, 429, "{\"error\":\"too_many_requests\"}");
                 return;
             }
             if ("authorization_code".equals(form.get("grant_type"))) {
@@ -90,6 +96,22 @@ public final class FakeIam implements AutoCloseable {
         String code = "code-" + UUID.randomUUID();
         codes.put(code, new Grant(userId, email, UUID.randomUUID(), challenge, clientId));
         return code;
+    }
+
+    /** 이미 만료된 액세스 토큰(서명은 유효). 토큰이 만료된 세션을 시간 흐름에 기대지 않고 만들 때 쓴다. */
+    public String expiredAccessToken(UUID userId, String email, String clientId) {
+        long now = System.currentTimeMillis();
+        return Jwts.builder()
+                .header().keyId(KID).and()
+                .subject(userId.toString())
+                .claim("email", email)
+                .claim("sid", UUID.randomUUID().toString())
+                .claim("role", "USER")
+                .claim("cid", clientId)
+                .issuedAt(new Date(now - 7_200_000))
+                .expiration(new Date(now - 3_600_000))
+                .signWith(keyPair.getPrivate(), Jwts.SIG.RS256)
+                .compact();
     }
 
     private String tokenBody(Grant grant) {

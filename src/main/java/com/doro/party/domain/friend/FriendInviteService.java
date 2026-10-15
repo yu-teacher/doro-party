@@ -1,10 +1,10 @@
 package com.doro.party.domain.friend;
 
+import com.hunnit_beasts.doro.sdk.bff.BffCrypto;
 import com.doro.party.common.exception.ErrorCode;
 import com.doro.party.common.exception.PartyException;
 import com.doro.party.common.util.Digests;
 import com.doro.party.config.PartyLimitsConfig.PartyLimits;
-import com.doro.party.domain.auth.SessionCrypto;
 import com.doro.party.domain.friend.FriendDtos.AcceptResult;
 import com.doro.party.domain.friend.FriendDtos.InviteLinkResponse;
 import com.doro.party.domain.friend.FriendDtos.InvitePreview;
@@ -41,7 +41,7 @@ public class FriendInviteService {
     private final FriendService friendService;
     private final PartyUserRepository users;
     private final PartyUserService userService;
-    private final SessionCrypto crypto;
+    private final BffCrypto crypto;
     private final PartyLimits limits;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();

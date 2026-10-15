@@ -27,16 +27,21 @@ public class LoginAttempt {
     @Column(name = "return_path", nullable = false, length = 500)
     private String returnPath;
 
+    /** 로그인을 시작한 브라우저에 심은 일회용 값의 해시. 콜백이 그 브라우저에서 왔는지 대조한다(로그인 CSRF 방지). */
+    @Column(name = "browser_hash", length = 64)
+    private String browserHash;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "expires_at", nullable = false, updatable = false)
     private Instant expiresAt;
 
-    public LoginAttempt(String stateHash, String codeVerifierEnc, String returnPath, Instant now, Instant expiresAt) {
+    public LoginAttempt(String stateHash, String codeVerifierEnc, String returnPath, String browserHash, Instant now, Instant expiresAt) {
         this.stateHash = stateHash;
         this.codeVerifierEnc = codeVerifierEnc;
         this.returnPath = returnPath;
+        this.browserHash = browserHash;
         this.createdAt = now;
         this.expiresAt = expiresAt;
     }
