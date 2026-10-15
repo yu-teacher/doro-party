@@ -78,6 +78,9 @@ logging:
 # 도로 파티 BFF 로그인 (Doro OAuth). 로그인 화면은 Doro 가 담당하고, 도로 파티는 비밀번호를 다루지 않는다.
 party:
   auth:
+    # embedded(기본): 로그인·세션·토큰 갱신을 이 서비스가 한다. gateway: 별도 서비스(doro-bff)가 하고 게이트웨이가 Bearer 를 붙여 준다.
+    # gateway 로 바꾸면 아래 OAuth·세션 설정은 쓰이지 않는다(BFF 쪽 설정이다).
+    mode: ${PARTY_AUTH_MODE:embedded}
     client-id: ${PARTY_OAUTH_CLIENT_ID:doro-party}
     authorize-url: ${PARTY_OAUTH_AUTHORIZE_URL:http://localhost:28080/oauth2/authorize}
     token-url: ${PARTY_OAUTH_TOKEN_URL:http://${IAM_HOST:localhost}:${IAM_PORT:28080}/oauth2/token}
@@ -89,7 +92,7 @@ party:
     # 세션 쿠키 Path. web-base-path 와 같은 값(같은 환경변수)을 써서 하위 경로에만 쿠키가 가게 한다.
     cookie-path: ${PARTY_WEB_BASE_PATH:/party}
     # DB 에 저장하는 토큰을 암호화하는 키(base64 32바이트). 기본값 없음: openssl rand -base64 32
-    session-encryption-key: ${PARTY_SESSION_KEY}
+    session-encryption-key: ${PARTY_SESSION_KEY:}
 
 # 사용량 상한(남용 방지). 환경변수로 조정한다.
   limits:
