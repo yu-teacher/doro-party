@@ -1,4 +1,4 @@
-import { LogIn, LogOut } from 'lucide-react';
+import { House, LogIn, LogOut } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 
@@ -8,7 +8,18 @@ export default function Header() {
 
   return (
     <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-      <h1 className="text-lg font-bold tracking-tight text-slate-100">도로 파티</h1>
+      <div className="flex items-center gap-1">
+        {/* 허브(/)는 이 앱의 라우터 밖이라 일반 링크로 이동한다 */}
+        <a
+          href="/"
+          className="-ml-2 rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+          aria-label="도로 홈으로"
+          title="도로 홈으로"
+        >
+          <House size={18} />
+        </a>
+        <h1 className="text-lg font-bold tracking-tight text-slate-100">도로 파티</h1>
+      </div>
       {isAuthenticated && user ? (
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-2 text-sm text-slate-300">
