@@ -146,3 +146,10 @@ party:
   deleted-sync:
     enabled: ${PARTY_DELETED_SYNC_ENABLED:true}
     interval: ${PARTY_DELETED_SYNC_INTERVAL:PT1H}
+
+  # Guard 튜플 삭제 아웃박스: 권한 회수 때 Guard 삭제가 실패하면 기록해 두었다가 성공할 때까지 다시 지운다(실패할수록 대기 시간이 두 배로 늘어난다).
+  guard-outbox:
+    enabled: ${PARTY_GUARD_OUTBOX_ENABLED:true}
+    interval: ${PARTY_GUARD_OUTBOX_INTERVAL:PT30S}
+    batch-size: ${PARTY_GUARD_OUTBOX_BATCH_SIZE:100}
+    max-backoff: ${PARTY_GUARD_OUTBOX_MAX_BACKOFF:PT1H}
