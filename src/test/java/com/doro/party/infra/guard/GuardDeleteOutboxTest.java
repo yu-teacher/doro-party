@@ -144,7 +144,8 @@ class GuardDeleteOutboxTest extends PartyHttpTestBase {
         assertThat(rows(map)).hasSize(1);
 
         Duration max = properties.maxBackoff();
-        Instant now = Instant.now();
+        // PostgreSQL 의 timestamptz 는 마이크로초까지만 저장한다. Linux 의 Instant.now() 는 나노초라 그대로 쓰면 저장 뒤 값이 미세하게 달라져 비교가 어긋난다.
+        Instant now = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
         for (int attempts = 2; attempts <= 13; attempts++) {
             now = now.plus(Duration.ofDays(1));
             retrier.processDue(now);
