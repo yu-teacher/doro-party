@@ -68,6 +68,8 @@ public abstract class PartyHttpTestBase {
         registry.add("doro.iam.revocation-check", () -> "OFF");
         // 개발용 버킷과 섞이지 않도록 테스트 전용 버킷을 쓴다
         registry.add("party.storage.bucket", () -> "doro-party-test");
+        // Guard 삭제 재시도기는 시험에서 직접 호출한다(배경 실행이 시험 중인 아웃박스 행을 건드리지 않게 주기를 길게)
+        registry.add("party.guard-outbox.interval", () -> "PT24H");
     }
 
     @Autowired protected MockMvc mockMvc;
