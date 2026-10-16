@@ -24,4 +24,9 @@ public interface PinPrivateNoteRepository extends JpaRepository<PinPrivateNote, 
     @Modifying
     @Query("delete from PinPrivateNote n where n.id.pinId = :pinId and n.id.userId = :userId")
     int deleteMine(@Param("pinId") UUID pinId, @Param("userId") UUID userId);
+
+    /** 탈퇴 정리: 이 사용자의 사적 메모를 모두 지운다(어느 지도의 핀이든). */
+    @Modifying
+    @Query("delete from PinPrivateNote n where n.id.userId = :userId")
+    int deleteAllByUserId(@Param("userId") UUID userId);
 }

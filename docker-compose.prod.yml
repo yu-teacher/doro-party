@@ -16,6 +16,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
       IAM_HOST: auth-api
       IAM_PORT: 8080
+      # Doro IAM 내부 API(탈퇴 사용자 목록) 호출자 토큰. IAM 의 DORO_IAM_INTERNAL_TOKENS 에 'party:<토큰>' 으로 등록한 값이다.
+      DORO_IAM_INTERNAL_TOKEN: ${DORO_IAM_INTERNAL_TOKEN:-}
       GUARD_GRPC_HOST: guard-api
       GUARD_GRPC_PORT: 9090
       GUARD_HTTP_HOST: guard-api

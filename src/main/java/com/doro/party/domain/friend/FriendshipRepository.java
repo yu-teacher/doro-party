@@ -62,4 +62,12 @@ public interface FriendshipRepository extends JpaRepository<Friendship, UUID> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = "delete from friendships where user_low_id = :low and user_high_id = :high and status = 'ACCEPTED'", nativeQuery = true)
     int deleteAccepted(@Param("low") UUID low, @Param("high") UUID high);
+
+    /** 탈퇴 정리: 이 사용자가 낀 친구 관계와 요청(대기 중·수락, 방향 무관). */
+    @Query("select f from Friendship f where f.userLowId = :userId or f.userHighId = :userId")
+    List<Friendship> findAllInvolving(@Param("userId") UUID userId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "delete from friendships where user_low_id = :userId or user_high_id = :userId", nativeQuery = true)
+    int deleteAllInvolving(@Param("userId") UUID userId);
 }

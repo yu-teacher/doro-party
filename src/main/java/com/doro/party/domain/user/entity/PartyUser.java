@@ -40,6 +40,21 @@ public class PartyUser {
         this.username = username;
     }
 
+    /** Doro 계정이 영구 탈퇴해 익명화된 시각. 값이 있으면 이미 처리된 사용자다. */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    /** 탈퇴 익명화: 식별 가능한 이름을 지운다. 행은 남겨 지도·핀·댓글이 가리키는 작성자 참조가 끊기지 않게 한다. */
+    public void anonymize(String username, String nickname, Instant deletedAt) {
+        this.username = username;
+        this.nickname = nickname;
+        this.deletedAt = deletedAt;
+    }
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
