@@ -62,4 +62,9 @@ public interface PinCommentRepository extends JpaRepository<PinComment, UUID> {
             LIMIT :limit
             """, nativeQuery = true)
     List<UnreadRow> findUnread(@Param("userId") UUID userId, @Param("limit") int limit);
+
+    /** 탈퇴 정리: 이 사용자의 댓글 읽음 표시를 지운다(댓글 자체는 지도를 같이 보는 사람들의 것이라 남긴다). */
+    @Modifying
+    @Query(value = "DELETE FROM pin_comment_reads WHERE user_id = :userId", nativeQuery = true)
+    int deleteReadsByUserId(@Param("userId") UUID userId);
 }

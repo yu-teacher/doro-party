@@ -67,6 +67,14 @@ public class GuardTuples {
         });
     }
 
+    /**
+     * 커밋을 기다리지 않고 바로 지우며, 실패하면 예외를 던진다. 탈퇴 정리처럼 "지우지 못했으면 처리 전체를 실패시키고 다시 시도해야" 하는
+     * 경로에서만 쓴다. 이미 없는 튜플을 지우는 것은 오류가 아니라 반복해도 안전하다.
+     */
+    public void deleteOrThrow(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
+        guardClient.deleteTupleOrThrow(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);
+    }
+
     private void cleanUpOrphan(String namespace, String objectId, String relation, String subjectNamespace, String subjectId, String subjectRelation) {
         try {
             guardClient.deleteTuple(namespace, objectId, relation, subjectNamespace, subjectId, subjectRelation);

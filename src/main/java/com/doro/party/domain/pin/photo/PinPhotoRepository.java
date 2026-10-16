@@ -1,6 +1,7 @@
 package com.doro.party.domain.pin.photo;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -32,4 +33,13 @@ public interface PinPhotoRepository extends JpaRepository<PinPhoto, UUID> {
 
     @Query("select ph.objectKey from PinPhoto ph where ph.pinId in (select p.id from Pin p where p.mapId = :mapId)")
     List<String> objectKeysOfMap(@Param("mapId") UUID mapId);
+
+    /** 탈퇴 정리: 이 사용자가 올린 사진의 스토리지 키(어느 지도의 핀이든). */
+    @Query("select ph.objectKey from PinPhoto ph where ph.uploadedBy = :userId")
+    List<String> objectKeysUploadedBy(@Param("userId") UUID userId);
+
+    /** 탈퇴 정리: 이 사용자가 올린 사진 기록. 파일을 먼저 지운 뒤에 부른다. */
+    @Modifying
+    @Query("delete from PinPhoto ph where ph.uploadedBy = :userId")
+    int deleteAllUploadedBy(@Param("userId") UUID userId);
 }

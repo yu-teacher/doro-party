@@ -1,9 +1,12 @@
 package com.doro.party.config;
 
 import com.doro.party.domain.user.service.PartyUserService;
+import com.doro.party.domain.user.sync.DeletedAccountAnonymizer;
 import com.hunnit_beasts.doro.sdk.bff.BffCrypto;
 import com.hunnit_beasts.doro.sdk.bff.BffProperties;
 import com.hunnit_beasts.doro.sdk.bff.BffUserHook;
+import com.hunnit_beasts.doro.sdk.sync.DeletedUserHandler;
+import com.hunnit_beasts.doro.sdk.sync.DeletedUsersProperties;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -57,5 +60,18 @@ public class PartyBffConfig {
     @ConditionalOnEmbeddedBff
     public BffUserHook bffUserHook(PartyUserService userService) {
         return user -> userService.getOrCreateUser(user);
+    }
+
+    /** 탈퇴 동기화 설정({@code party.deleted-sync.*}: enabled, page-size, overlap, interval, initial-delay, 타임아웃). 로직은 SDK 가 맡는다. */
+    @Bean
+    @ConfigurationProperties(prefix = "party.deleted-sync")
+    public DeletedUsersProperties deletedUsersProperties() {
+        return new DeletedUsersProperties();
+    }
+
+    /** Doro 에서 영구 탈퇴한 사용자의 도로 파티 데이터를 익명화·삭제한다(멱등). 로그인 방식과 무관하게 필요하다. */
+    @Bean
+    public DeletedUserHandler deletedUserHandler(DeletedAccountAnonymizer anonymizer) {
+        return anonymizer::anonymize;
     }
 }

@@ -20,4 +20,9 @@ public interface FriendInviteRepository extends JpaRepository<FriendInvite, UUID
             + "on conflict (owner_id) do update set code_hash = excluded.code_hash, code_enc = excluded.code_enc, "
             + "created_at = now(), expires_at = excluded.expires_at", nativeQuery = true)
     int upsert(@Param("ownerId") UUID ownerId, @Param("hash") String hash, @Param("enc") String enc, @Param("expiresAt") Instant expiresAt);
+
+    /** 탈퇴 정리: 이 사용자의 초대 링크를 지운다. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("delete from FriendInvite i where i.ownerId = :ownerId")
+    int deleteByOwnerId(@Param("ownerId") UUID ownerId);
 }

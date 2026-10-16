@@ -27,4 +27,16 @@ public interface PartyMapRepository extends JpaRepository<PartyMap, UUID> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select m from PartyMap m where m.id = :id")
     Optional<PartyMap> findByIdForUpdate(@Param("id") UUID id);
+
+    /**
+     * 탈퇴 정리: 이 지도에 주인(탈퇴하는 사람) 말고 다른 사람이 남긴 핀·댓글·방문 기록·사진이 있는가.
+     * 있으면 그 사람들의 기록이므로 지도를 지우지 않고 남긴다.
+     */
+    @Query(value = """
+            SELECT EXISTS (SELECT 1 FROM pins WHERE map_id = :mapId AND created_by <> :userId)
+                OR EXISTS (SELECT 1 FROM pin_comments c JOIN pins p ON p.id = c.pin_id WHERE p.map_id = :mapId AND c.user_id <> :userId)
+                OR EXISTS (SELECT 1 FROM visit_logs v JOIN pins p ON p.id = v.pin_id WHERE p.map_id = :mapId AND v.user_id <> :userId)
+                OR EXISTS (SELECT 1 FROM pin_photos ph JOIN pins p ON p.id = ph.pin_id WHERE p.map_id = :mapId AND ph.uploaded_by <> :userId)
+            """, nativeQuery = true)
+    boolean hasContentFromOthers(@Param("mapId") UUID mapId, @Param("userId") UUID userId);
 }
