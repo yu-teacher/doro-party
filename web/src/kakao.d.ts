@@ -35,6 +35,7 @@ declare namespace kakao.maps {
   class CustomOverlay {
     constructor(options: CustomOverlayOptions);
     setMap(map: Map | null): void;
+    setPosition(position: LatLng): void;
   }
 
   interface CircleOptions {
@@ -53,6 +54,8 @@ declare namespace kakao.maps {
   class Circle {
     constructor(options: CircleOptions);
     setMap(map: Map | null): void;
+    setPosition(position: LatLng): void;
+    setRadius(radius: number): void;
   }
 
   class Size {

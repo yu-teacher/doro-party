@@ -7,6 +7,8 @@ import { heatStyle } from './heat';
 import type { HeatSpot } from './heat';
 import { loadKakaoMaps } from './loadKakaoMaps';
 import { DRAFT_COLOR, markerIcon, pinColor, safeColor } from './markerIcon';
+import { MY_LOCATION_COLOR, accuracyCircleRadius, buildMyLocationElement } from './myLocation';
+import type { MyLocation } from './myLocation';
 import type { ColorMode, MarkerIconSpec } from './markerIcon';
 
 type Status = 'loading' | 'ready' | 'error' | 'no-key';
@@ -35,6 +37,8 @@ interface Props {
    * aboveSheet 이면 곧 하단 시트가 아래쪽을 덮으므로, 시트에 가려지지 않는 위쪽 영역의 가운데에 그 위치가 오도록 옮긴다.
    */
   panTo: (LatLngLiteral & { nonce: number; aboveSheet?: boolean }) | null;
+  /** 내 위치(내 위치 버튼으로 확인한 값). 파란 점과 정확도 원으로 보여 주고, 없으면 그리지 않는다. */
+  myLocation: MyLocation | null;
   /** 마커 색: 핀의 상태로 / 핀을 꽂은 사람으로(겹쳐보기). 겹쳐보기에서는 가고 싶은 곳을 옅게 그린다. */
   colorMode: ColorMode;
   /** 추천 장소를 점수가 높을수록 진한 붉은 원으로 겹쳐 그린다(히트맵). 없으면 그리지 않는다. */
@@ -104,13 +108,14 @@ function buildClusterElement(pins: Pin[], mode: ColorMode, onClick: () => void):
 }
 
 /** 화면 가득 카카오맵을 그리고 핀을 마커로 보여 준다. 가까운 핀은 묶어서 보여 준다. 키가 없거나 SDK 를 못 불러오면 이유를 안내한다. */
-export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, colorMode, heat, onMapClick, onPinClick, onClusterOpen }: Props) {
+export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, panTo, myLocation, colorMode, heat, onMapClick, onPinClick, onClusterOpen }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const markersRef = useRef(new Map<string, kakao.maps.Marker>());
   const clusterOverlaysRef = useRef<kakao.maps.CustomOverlay[]>([]);
   const draftMarkerRef = useRef<kakao.maps.Marker | null>(null);
   const heatCirclesRef = useRef<kakao.maps.Circle[]>([]);
+  const myLocationRef = useRef<{ overlay: kakao.maps.CustomOverlay; circle: kakao.maps.Circle | null } | null>(null);
   const fittedKeyRef = useRef<string | null>(null);
   const handlersRef = useRef({ onMapClick, onPinClick, onClusterOpen });
   /** 이동·확대가 끝날 때마다 불리는 렌더 함수. 최신 props 로 다시 만들어 둔다. */
@@ -171,6 +176,9 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
       heatCirclesRef.current = [];
       draftMarkerRef.current?.setMap(null);
       draftMarkerRef.current = null;
+      myLocationRef.current?.overlay.setMap(null);
+      myLocationRef.current?.circle?.setMap(null);
+      myLocationRef.current = null;
       mapRef.current = null;
     };
   }, []);
@@ -289,6 +297,38 @@ export default function PartyMapView({ ref, pins, selectedPinId, draft, fitKey, 
       });
     });
   }, [status, heat]);
+
+  // 내 위치: 파란 점과 정확도 원. 위치가 바뀌면 새로 만들지 않고 옮긴다. 핀·묶음보다 아래에 그려 핀을 가리지 않는다.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (status !== 'ready' || !map) {
+      return;
+    }
+    const shown = myLocationRef.current;
+    if (!myLocation) {
+      shown?.overlay.setMap(null);
+      shown?.circle?.setMap(null);
+      myLocationRef.current = null;
+      return;
+    }
+    const position = new kakao.maps.LatLng(myLocation.lat, myLocation.lng);
+    const radius = accuracyCircleRadius(myLocation.accuracy);
+    const overlay = shown?.overlay ?? new kakao.maps.CustomOverlay({ position, content: buildMyLocationElement(), map, xAnchor: 0.5, yAnchor: 0.5, zIndex: 0 });
+    overlay.setPosition(position);
+    let circle = shown?.circle ?? null;
+    if (radius === null) {
+      circle?.setMap(null);
+      circle = null;
+    } else if (circle) {
+      circle.setPosition(position);
+      circle.setRadius(radius);
+    } else {
+      circle = new kakao.maps.Circle({
+        center: position, radius, strokeWeight: 1, strokeColor: MY_LOCATION_COLOR, strokeOpacity: 0.5, fillColor: MY_LOCATION_COLOR, fillOpacity: 0.12, map, zIndex: 0,
+      });
+    }
+    myLocationRef.current = { overlay, circle };
+  }, [status, myLocation]);
 
   // 작성 중인 위치 표시
   useEffect(() => {
