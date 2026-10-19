@@ -1,5 +1,6 @@
 package com.doro.party.support;
 
+import com.doro.party.domain.push.PushTestSupport;
 import com.doro.party.infra.guard.GuardTuples;
 import com.doro.party.infra.guard.PartyGuard;
 import com.hunnit_beasts.doro.sdk.security.jwks.JwksKeyProvider;
@@ -70,6 +71,12 @@ public abstract class PartyHttpTestBase {
         registry.add("party.storage.bucket", () -> "doro-party-test");
         // Guard 삭제 재시도기는 시험에서 직접 호출한다(배경 실행이 시험 중인 아웃박스 행을 건드리지 않게 주기를 길게)
         registry.add("party.guard-outbox.interval", () -> "PT24H");
+        // 웹 푸시: 시험용 VAPID 키와 가짜 푸시 서비스(localhost, http). 운영과 달리 https 요구만 끈다.
+        registry.add("party.push.vapid-public-key", () -> PushTestSupport.KEYS.publicKey);
+        registry.add("party.push.vapid-private-key", () -> PushTestSupport.KEYS.privateKey);
+        registry.add("party.push.subject", () -> "mailto:test@example.test");
+        registry.add("party.push.allowed-hosts", () -> "localhost");
+        registry.add("party.push.require-https", () -> "false");
     }
 
     @Autowired protected MockMvc mockMvc;

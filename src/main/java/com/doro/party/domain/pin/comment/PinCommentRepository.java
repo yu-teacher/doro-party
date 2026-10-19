@@ -19,6 +19,10 @@ public interface PinCommentRepository extends JpaRepository<PinComment, UUID> {
 
     long countByPinId(UUID pinId);
 
+    /** 이 핀에 댓글을 남긴 적이 있는 사람들(푸시를 받을 참여자 계산용). */
+    @Query("select distinct c.userId from PinComment c where c.pinId = :pinId")
+    List<UUID> findAuthorIdsOfPin(@Param("pinId") UUID pinId);
+
     interface CommentCount {
         UUID getPinId();
 

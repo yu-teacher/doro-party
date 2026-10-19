@@ -16,6 +16,8 @@ import com.doro.party.domain.map.repository.PartyMapRepository;
 import com.doro.party.domain.pin.comment.PinCommentRepository;
 import com.doro.party.domain.pin.note.PinPrivateNoteRepository;
 import com.doro.party.domain.pin.photo.PinPhotoRepository;
+import com.doro.party.domain.push.PushPreferencesRepository;
+import com.doro.party.domain.push.PushSubscriptionRepository;
 import com.doro.party.domain.share.FriendAccess;
 import com.doro.party.domain.share.MapUserShare;
 import com.doro.party.domain.share.MapUserShareRepository;
@@ -38,7 +40,7 @@ import java.util.UUID;
 
 /**
  * Doro 에서 영구 탈퇴한 사용자의 도로 파티 데이터를 정리한다. 지도·핀·댓글처럼 다른 사람과 함께 쓰는 기록은 남기고 작성자만
- * '탈퇴한 사용자' 로 보이게 하며, 본인만 볼 수 있던 데이터(사적 메모·초대 링크·친구 관계·읽음 표시·올린 사진)는 지운다.
+ * '탈퇴한 사용자' 로 보이게 하며, 본인만 볼 수 있던 데이터(사적 메모·초대 링크·친구 관계·읽음 표시·푸시 구독·올린 사진)는 지운다.
  * 아무도 볼 수 없게 되는 지도(공유받은 사람도, 다른 사람의 기록도 없는 지도)는 내용과 함께 지운다.
  *
  * <p>한 번의 DB 트랜잭션 안에서 DB 를 고치고, 커밋 전에 사진 파일과 Guard 튜플을 지운다. 파일·튜플 삭제가 실패하면 예외가 나서 DB 도
@@ -64,6 +66,8 @@ public class DeletedAccountAnonymizer {
     private final PinPhotoRepository photos;
     private final PinPrivateNoteRepository privateNotes;
     private final PinCommentRepository comments;
+    private final PushSubscriptionRepository pushSubscriptions;
+    private final PushPreferencesRepository pushPreferences;
     private final ObjectStorage storage;
     private final GuardTuples guardTuples;
 
@@ -89,9 +93,12 @@ public class DeletedAccountAnonymizer {
         // 로그인 세션(embedded 모드의 암호화된 토큰). gateway 모드에서는 이 서비스에 세션이 없어 0건이다.
         authSessions.deleteAllByUserId(userId);
 
-        // 본인에게만 보이던 것: 사적 메모, 댓글 읽음 표시, 친구 초대 링크
+        // 본인에게만 보이던 것: 사적 메모, 댓글 읽음 표시, 친구 초대 링크, 푸시 구독
         privateNotes.deleteAllByUserId(userId);
         comments.deleteReadsByUserId(userId);
+        // 알림을 받던 기기 정보와 알림 설정: 탈퇴한 사람에게 더는 푸시를 보내지 않는다
+        pushSubscriptions.deleteAllByUserId(userId);
+        pushPreferences.deleteAllByUserId(userId);
         friendInvites.deleteByOwnerId(userId);
 
         removeFriendships(userId, revoke);

@@ -7,6 +7,7 @@ import com.doro.party.domain.friend.Friendship;
 import com.doro.party.domain.friend.FriendshipRepository;
 import com.doro.party.domain.map.entity.PartyMap;
 import com.doro.party.domain.map.repository.PartyMapRepository;
+import com.doro.party.domain.push.PushEvents;
 import com.doro.party.domain.share.ShareDtos.MemberView;
 import com.doro.party.domain.share.ShareDtos.ShareView;
 import com.doro.party.domain.user.dto.PartyUserDtos.UserSummary;
@@ -17,6 +18,7 @@ import com.doro.party.infra.guard.PartyGuard;
 import com.hunnit_beasts.doro.sdk.domain.DoroUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,6 +44,7 @@ public class ShareService {
     private final FriendshipRepository friendships;
     private final GuardTuples guardTuples;
     private final PartyLimits limits;
+    private final ApplicationEventPublisher events;
 
     /** 이 지도를 공유받은 사람 목록(주인용). */
     @Transactional(readOnly = true)
@@ -90,6 +93,9 @@ public class ShareService {
             saved = shares.saveAndFlush(new MapUserShare(mapId, targetId, role));
             guardTuples.write(PartyGuard.MAP, mapId.toString(), role.guardRelation(), PartyGuard.USER, targetId.toString());
             log.info("Map shared: mapId={}, with={}, role={}", mapId, targetId, role);
+            // 처음 공유받는 사람에게만 알린다(권한만 바꾼 경우는 알리지 않는다)
+            String ownerNickname = users.findById(owner.userId()).map(PartyUser::getNickname).orElse("친구");
+            events.publishEvent(new PushEvents.MapShared(targetId, mapId, map.getName(), ownerNickname));
         } else if (existing.getRole() != role) {
             ShareRole previous = existing.getRole();
             existing.changeRole(role);
