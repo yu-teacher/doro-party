@@ -57,6 +57,8 @@ export async function mockApi(page: Page, { loggedIn }: MockOptions): Promise<vo
     if (/^\/maps\/[^/]+\/pins$/.test(path)) return json(route, envelope([]));
     if (/^\/maps\/[^/]+\/(members|groups|shares|private-notes)$/.test(path)) return json(route, envelope([]));
     if (path === '/comments/unread') return json(route, envelope([]));
+    if (path === '/push/config') return json(route, envelope({ enabled: false, publicKey: '' }));
+    if (path === '/push/preferences') return json(route, envelope({ comments: true, friendRequests: true, shares: true }));
     if (path === '/overlay/pins') return json(route, envelope({ pins: [], maps: [] }));
     if (path === '/friends') return json(route, envelope(friends));
     if (path === '/friends/invite') return json(route, envelope({ code: 'ABCD1234', expiresAt: '2026-12-01T00:00:00Z' }));

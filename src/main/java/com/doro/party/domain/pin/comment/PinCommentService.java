@@ -8,6 +8,7 @@ import com.doro.party.domain.pin.comment.PinCommentDtos.CommentResponse;
 import com.doro.party.domain.pin.comment.PinCommentDtos.UnreadPin;
 import com.doro.party.domain.pin.entity.Pin;
 import com.doro.party.domain.pin.service.PinAccess;
+import com.doro.party.domain.push.PushEvents;
 import com.doro.party.domain.user.entity.PartyUser;
 import com.doro.party.domain.user.repository.PartyUserRepository;
 import com.doro.party.domain.user.service.PartyUserService;
@@ -16,6 +17,7 @@ import com.hunnit_beasts.doro.sdk.client.DoroGuardClient;
 import com.hunnit_beasts.doro.sdk.domain.DoroUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -47,6 +49,7 @@ public class PinCommentService {
     private final PartyLimits limits;
     private final DoroGuardClient guard;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     private Instant now() {
         return Instant.now(clock).truncatedTo(ChronoUnit.MICROS);
@@ -55,7 +58,7 @@ public class PinCommentService {
     @Transactional
     public CommentResponse add(UUID mapId, UUID pinId, DoroUser doroUser, CommentRequest request) {
         PartyUser user = userService.getOrCreateUser(doroUser);
-        access.requirePinForUpdate(mapId, pinId);
+        Pin pin = access.requirePinForUpdate(mapId, pinId);
         if (comments.countByPinId(pinId) >= limits.maxCommentsPerPin()) {
             throw new PartyException(ErrorCode.LIMIT_EXCEEDED, "댓글은 핀마다 최대 " + limits.maxCommentsPerPin() + "개까지 남길 수 있습니다.");
         }
@@ -63,6 +66,8 @@ public class PinCommentService {
         // 내가 쓴 댓글까지는 읽은 것이다(이후 남이 쓴 댓글만 "새 댓글" 이 된다)
         comments.markRead(pinId, user.getId(), saved.getCreatedAt());
         log.info("Comment added: commentId={}, pinId={}, userId={}", saved.getId(), pinId, user.getId());
+        // 커밋된 뒤에 핀을 꽂은 사람과 댓글 참여자에게 푸시를 보낸다(롤백되면 보내지 않는다)
+        events.publishEvent(new PushEvents.CommentPosted(mapId, pinId, pin.getName(), pin.getCreatedBy(), user.getId(), user.getNickname(), saved.getBody()));
         return CommentResponse.from(saved, user);
     }
 

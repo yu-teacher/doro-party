@@ -120,6 +120,21 @@ party:
     max-overlay-maps: ${PARTY_MAX_OVERLAY_MAPS:20}
     max-overlay-pins: ${PARTY_MAX_OVERLAY_PINS:5000}
 
+  # 웹 푸시. VAPID 키 쌍과 연락처가 모두 있어야 켜진다(없으면 푸시만 꺼진 채 앱은 그대로 동작). 키 만들기: scripts/setup-push-server.sh
+  push:
+    vapid-public-key: ${PARTY_VAPID_PUBLIC_KEY:}
+    vapid-private-key: ${PARTY_VAPID_PRIVATE_KEY:}
+    subject: ${PARTY_VAPID_SUBJECT:}
+    # 구독 주소로 받아도 되는 푸시 서비스 도메인(하위 도메인 포함). 서버가 이 주소로 직접 접속하므로 목록 밖은 거절한다.
+    allowed-hosts: ${PARTY_PUSH_ALLOWED_HOSTS:fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,notify.windows.com}
+    require-https: ${PARTY_PUSH_REQUIRE_HTTPS:true}
+    ttl: ${PARTY_PUSH_TTL:PT24H}
+    request-timeout: ${PARTY_PUSH_REQUEST_TIMEOUT:PT10S}
+    max-subscriptions-per-user: ${PARTY_PUSH_MAX_SUBSCRIPTIONS_PER_USER:10}
+    failures-before-removal: ${PARTY_PUSH_FAILURES_BEFORE_REMOVAL:5}
+    worker-threads: ${PARTY_PUSH_WORKER_THREADS:2}
+    queue-capacity: ${PARTY_PUSH_QUEUE_CAPACITY:200}
+
   # "오늘" 을 정하는 서비스 시간대(방문 날짜가 미래인지 판단)
   timezone: ${PARTY_TIMEZONE:Asia/Seoul}
 

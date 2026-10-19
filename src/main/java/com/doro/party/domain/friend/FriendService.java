@@ -9,6 +9,7 @@ import com.doro.party.domain.friend.FriendDtos.FriendsOverview;
 import com.doro.party.domain.friend.FriendDtos.RequestResult;
 import com.doro.party.domain.share.ShareService;
 import com.doro.party.domain.user.dto.PartyUserDtos.UserSummary;
+import com.doro.party.domain.push.PushEvents;
 import com.doro.party.domain.user.entity.PartyUser;
 import com.doro.party.domain.user.repository.PartyUserRepository;
 import com.doro.party.domain.user.service.PartyUserService;
@@ -16,6 +17,7 @@ import com.doro.party.domain.user.service.UsernamePolicy;
 import com.hunnit_beasts.doro.sdk.domain.DoroUser;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,6 +38,7 @@ public class FriendService {
     private final PartyLimits limits;
     private final ShareService shareService;
     private final FriendListTuples friendList;
+    private final ApplicationEventPublisher events;
 
     @Transactional(readOnly = true)
     public FriendsOverview overview(DoroUser doroUser) {
@@ -70,6 +73,7 @@ public class FriendService {
                 throw new PartyException(ErrorCode.LIMIT_EXCEEDED, "보낸 친구 요청은 최대 " + limits.maxPendingFriendRequests() + "개까지 대기할 수 있습니다.");
             }
             log.info("Friend request sent: from={}, to={}", me.getId(), target.getId());
+            events.publishEvent(new PushEvents.FriendRequested(target.getId(), me.getNickname()));
             return new RequestResult("PENDING", UserSummary.from(target));
         }
 
@@ -81,6 +85,7 @@ public class FriendService {
             if (friendships.acceptPending(existing.getId()) == 1) {
                 friendList.added(me.getId(), target.getId());
             }
+            events.publishEvent(new PushEvents.FriendAccepted(target.getId(), me.getNickname()));
             log.info("Friend request matched and accepted: a={}, b={}", me.getId(), target.getId());
             return new RequestResult("ACCEPTED", UserSummary.from(target));
         }
@@ -98,6 +103,7 @@ public class FriendService {
         requireRoomForFriend(request.getRequesterId());
         if (friendships.acceptPending(friendshipId) == 1) {
             friendList.added(me, request.getRequesterId());
+            events.publishEvent(new PushEvents.FriendAccepted(request.getRequesterId(), userService.getOrCreateUser(doroUser).getNickname()));
             log.info("Friend request accepted: requester={}, accepter={}", request.getRequesterId(), me);
         }
     }

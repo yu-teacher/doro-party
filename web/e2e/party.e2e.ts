@@ -35,6 +35,14 @@ test.describe('파티: 로그인', () => {
     await expectMobileFriendly(page);
   });
 
+  test('알림 설정 시트', async ({ page }) => {
+    await page.goto('/party/');
+    await page.getByRole('button', { name: '알림 설정' }).click();
+    await expect(page.getByRole('dialog', { name: '알림' })).toBeVisible();
+    await expect(page.getByText('아직 푸시 알림을 쓸 수 없어요')).toBeVisible();
+    await expectMobileFriendly(page);
+  });
+
   test('친구', async ({ page }) => {
     await page.goto('/party/friends');
     await expect(page.getByText(/친구닉네임/).first()).toBeVisible();

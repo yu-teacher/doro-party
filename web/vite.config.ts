@@ -78,6 +78,8 @@ export default defineConfig({
         // 이 둘을 켜 주는데, 등록을 앱 코드가 하므로(injectRegister: false) 직접 켠다. 빠뜨리면 새 서비스 워커가 앱을 완전히 닫을 때까지 대기한다.
         skipWaiting: true,
         clientsClaim: true,
+        // 푸시 알림 처리(push, notificationclick)는 public/push-sw.js 에 두고 서비스 워커가 불러온다
+        importScripts: ['push-sw.js'],
         // 앱 셸(정적 파일)만 캐시한다. 지도·핀 같은 개인 데이터가 담긴 API 와 업로드 사진은 절대 캐시하지 않는다.
         navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/^\/party\/api\//],

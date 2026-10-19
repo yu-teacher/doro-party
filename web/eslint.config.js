@@ -31,6 +31,13 @@ export default tseslint.config(
     },
   },
   {
+    // 서비스 워커에서 불러오는 푸시 처리 코드(브라우저 창이 아니라 서비스 워커 환경)
+    files: ['public/push-sw.js'],
+    extends: [js.configs.recommended],
+    languageOptions: { globals: { ...globals.serviceworker } },
+    rules: { 'no-console': ['error', { allow: ['error', 'warn'] }], 'no-empty': ['error', { allowEmptyCatch: false }] },
+  },
+  {
     files: ['src/**/*.test.{ts,tsx}'],
     rules: { 'no-console': 'off' },
   }

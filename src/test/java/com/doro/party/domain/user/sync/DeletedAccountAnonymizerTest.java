@@ -1,5 +1,6 @@
 package com.doro.party.domain.user.sync;
 
+import com.doro.party.domain.push.PushTestSupport.TestDevice;
 import com.doro.party.infra.guard.PartyGuard;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Doro 에서 영구 탈퇴한 사용자의 도로 파티 데이터 정리를 실제 DB·MinIO·Guard 로 검증한다. */
@@ -43,6 +45,12 @@ class DeletedAccountAnonymizerTest extends DeletedAccountTestSupport {
         visit(victim, shared, pinShared);
         comment(victim, shared, pinShared, "내 댓글");
         markRead(victim, shared, pinShared);
+        // 알림 받던 기기와 알림 설정(친구의 기기는 그대로 남아야 한다)
+        TestDevice victimPhone = new TestDevice();
+        TestDevice friendPhone = new TestDevice();
+        send(victim, put("/api/v1/push/subscription").contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(victimPhone.subscriptionJson())).andExpect(status().isOk());
+        send(friend, put("/api/v1/push/subscription").contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(friendPhone.subscriptionJson())).andExpect(status().isOk());
+        send(victim, put("/api/v1/push/preferences").contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"comments\":false,\"friendRequests\":true,\"shares\":true}")).andExpect(status().isOk());
 
         // 친구의 지도에 victim 이 참여
         String friendMap = createMap(friend, "친구 지도");
@@ -67,6 +75,9 @@ class DeletedAccountAnonymizerTest extends DeletedAccountTestSupport {
         // 본인 전용 데이터 삭제
         assertThat(count("select count(*) from pin_private_notes where user_id = ?", victim.id())).isZero();
         assertThat(count("select count(*) from pin_comment_reads where user_id = ?", victim.id())).isZero();
+        assertThat(count("select count(*) from push_subscriptions where user_id = ?", victim.id())).as("푸시 구독").isZero();
+        assertThat(count("select count(*) from push_preferences where user_id = ?", victim.id())).as("알림 설정").isZero();
+        assertThat(count("select count(*) from push_subscriptions where user_id = ?", friend.id())).as("친구의 구독은 그대로").isEqualTo(1);
         assertThat(count("select count(*) from friend_invites where owner_id = ?", victim.id())).isZero();
         assertThat(count("select count(*) from friendships where user_low_id = ? or user_high_id = ?", victim.id(), victim.id())).isZero();
         assertThat(count("select count(*) from auth_sessions where user_id = ?", victim.id())).as("로그인 세션").isZero();

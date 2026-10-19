@@ -33,6 +33,10 @@ services:
       # embedded(기본): 로그인·세션을 이 서비스가 한다. gateway: 별도 BFF(doro-bff)가 하고 게이트웨이가 Bearer 를 붙여 준다(docs/BFF.md).
       PARTY_AUTH_MODE: ${PARTY_AUTH_MODE:-embedded}
       PARTY_SESSION_KEY: ${PARTY_SESSION_KEY:?PARTY_SESSION_KEY must be set in .env}
+      # 웹 푸시(알림). 키가 비어 있으면 푸시만 꺼진 채 앱은 그대로 동작한다. 값은 .env 에만 둔다(scripts/setup-push-server.sh).
+      PARTY_VAPID_PUBLIC_KEY: ${PARTY_VAPID_PUBLIC_KEY:-}
+      PARTY_VAPID_PRIVATE_KEY: ${PARTY_VAPID_PRIVATE_KEY:-}
+      PARTY_VAPID_SUBJECT: ${PARTY_VAPID_SUBJECT:-}
     networks:
       - doro-network
 
