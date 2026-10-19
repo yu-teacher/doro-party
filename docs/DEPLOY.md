@@ -17,6 +17,16 @@ scp docker-compose.prod.yml <서버>:doro-party/
 4. **서버 `.env`**: DB·MinIO 접속 정보, `PARTY_SESSION_KEY`(새 난수, 비밀번호 관리자에 보관. 바꾸면 모든 세션이 무효), `PARTY_OAUTH_*`, 카카오 지도 키(웹 빌드 때 번들에 들어간다).
 5. **Guard 서비스 토큰**: 서비스별 토큰(`schema-write` 포함)을 Guard 설정에 추가하고 Guard 를 다시 만든다. 공유 토큰을 쓰지 않는다.
 
+### 푸시 알림 키 (선택, 한 번만)
+앱을 닫아 둬도 폰으로 알리는 웹 푸시는 서버에 VAPID 키가 있어야 켜진다(없으면 푸시만 꺼진 채 앱은 그대로 동작한다). `scripts/setup-push-server.sh` 가 키 쌍을 만들어 서버 `.env` 와 compose 에 넣는다(멱등, 개인 키는 출력하지 않는다, 기본은 계획만 보는 드라이런).
+
+```bash
+ssh <서버> 'bash -s -- --subject mailto:<내 메일>' < scripts/setup-push-server.sh            # 계획만
+ssh <서버> 'bash -s -- --apply --subject mailto:<내 메일>' < scripts/setup-push-server.sh    # 반영
+```
+
+반영한 뒤 도로 파티를 배포하면(또는 `party-api` 를 다시 만들면) 컨테이너가 새 환경변수를 읽는다. 확인은 앱의 알림 설정(헤더의 종 아이콘) → "이 기기에서 알림 받기" → "시험 알림 보내기". 아이폰·아이패드는 홈 화면에 추가한 앱에서만 받을 수 있다. 서버가 허용하는 푸시 서비스 도메인은 `PARTY_PUSH_ALLOWED_HOSTS` 로 바꿀 수 있다(기본: FCM·Mozilla·Apple·Windows).
+
 ## 2. 게이트웨이
 `scripts/apply-gateway-party.sh` 가 `deploy/gateway-party.conf` 의 upstream·location 을 게이트웨이 `nginx.conf` 에 넣는다. 새 설정을 컨테이너 안에서 먼저 `nginx -t` 로 검증하고, 반영 뒤 확인(`/party/` 200, API 401, 기존 서비스 200)이 실패하면 백업으로 자동 복구한다.
 

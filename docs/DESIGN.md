@@ -76,6 +76,8 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 | `visit_logs` | id, pin_id, user_id, visited_on, note |
 | `pin_comments` | id, pin_id, user_id, body(≤500), created_at, edited_at |
 | `pin_comment_reads` | (pin_id, user_id), last_read_at — 이 시각까지의 댓글을 읽었다는 표시 |
+| `push_subscriptions` | id, user_id, endpoint(unique), p256dh, auth, user_agent, last_success_at, failure_count — 기기(브라우저)마다 하나. endpoint 는 서버가 대신 접속하는 주소라 비밀로 다룬다 |
+| `push_preferences` | user_id, comments, friend_requests, shares — 알림 종류별 켜기/끄기(행이 없으면 모두 켜짐) |
 | `party_users` | id(Doro 사용자 ID), username(친구가 나를 찾는 이름, 본인이 수정), nickname, color — 이메일은 저장하지 않는다 |
 | `friendships` | 정렬된 (user_low_id, user_high_id) 유니크, requester_id, status(PENDING/ACCEPTED) |
 | `friend_invites` | owner_id 당 하나, code_hash, code_enc(암호화), expires_at |
@@ -135,6 +137,7 @@ type party_map {
 | 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
 | 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
 | 핀 댓글 | `GET/POST /maps/{id}/pins/{pinId}/comments`, `PATCH/DELETE .../comments/{commentId}`, `POST .../comments/read {upTo}`(읽음 표시), `GET /comments/unread`(새 댓글이 달린 내 핀) |
+| 푸시 알림 | `GET /push/config`(켜져 있는지, 공개 키), `PUT/DELETE /push/subscription`(이 기기 등록·해제), `GET/PUT /push/preferences`(알림 종류), `POST /push/test`(시험 알림) |
 | 사적 메모 | `GET /maps/{id}/private-notes`(내 것 전체), `PUT/DELETE /maps/{id}/pins/{pinId}/private-note` |
 | 사진 | `POST/GET /maps/{id}/pins/{pinId}/photos`(multipart `file`), `GET .../photos/{photoId}/content`, `DELETE .../photos/{photoId}` |
 | 프로필 | `GET/PATCH /me`(닉네임·사용자명) |
@@ -228,6 +231,22 @@ M4까지가 "쓸 만한 서비스"의 기준선이었고, M0~M5 는 모두 구�
 `DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media`, `PARTY_OAUTH_CLIENT_ID=doro-party`, `PARTY_OAUTH_REDIRECT_URI`, `PARTY_SESSION_KEY`(base64 32바이트, 기본값 없음), `PARTY_COOKIE_SECURE`, 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
 
 포트: party-api `8086`, party-web `3005`(Doro·blog·menu·sebi-wht·로컬의 다른 컨테이너가 쓰는 8080~8085, 8090, 3000~3004 와 겹치지 않음).
+
+### 웹 푸시 알림
+- **범위**: 앱을 닫아 둬도 폰으로 알린다. 알림은 4가지: ① 내가 꽂았거나 댓글을 남긴 핀에 **새 댓글**(받는 사람 규칙은 "핀 댓글" 절과 같다) ② **친구 요청**을 받았을 때 ③ 내 요청이 **수락**됐을 때 ④ 친구가 내게 **지도를 공유**했을 때(처음 공유받을 때만, 권한만 바뀌면 안 보낸다). 종류별로 켜고 끌 수 있다(`push_preferences`).
+- **구성**: 브라우저가 서비스 워커에서 푸시 구독(PushSubscription)을 만들어 서버에 등록하면, 서버는 그 구독의 주소(endpoint)로 **암호화한 메시지를 푸시 서비스(FCM·Mozilla·Apple 등)에 전달**하고, 푸시 서비스가 기기에 전달한다. 서버는 외부 라이브러리 없이 JDK 암호 API 만으로 **RFC 8291(메시지 암호화, aes128gcm)** 과 **RFC 8292(VAPID 서명, ES256)** 를 구현했다. 푸시 서비스는 내용을 볼 수 없다.
+- **정확성 검증**: RFC 8291 부록 A 의 공식 테스트 벡터와 **바이트 단위로 일치**하고, 받는 쪽 복호화를 따로 구현해 서로 검증한다. 그리고 실제 Chrome 이 만든 **진짜 FCM 구독**에 서버 코드로 보내 **FCM 이 받아들이고(201) 브라우저가 복호화해 알림을 띄우는 것**을 확인했다(`PushLiveInteropTest`, `PUSH_LIVE_DIR` 가 있을 때만 실행되는 연동 확인).
+- **보내는 흐름**: 서비스가 DB 변경과 같은 트랜잭션에서 이벤트를 발행하고(`PushEvents`), **커밋된 뒤에만** 전용 스레드 풀(`pushExecutor`)에서 `PushDispatcher` 가 받아 보낸다. 롤백된 변경은 알림이 가지 않고, 푸시 서비스가 느려도 사용자의 요청은 늦어지지 않으며, 대기열이 가득 차면 새 알림은 버린다(요청 스레드를 막지 않는다). 알림은 부가 기능이라 어떤 푸시 오류도 댓글·친구 요청 저장에는 영향을 주지 않는다.
+- **보안**
+  - **SSRF 방지**: 서버가 사용자가 준 구독 주소로 직접 접속하므로, 알려진 푸시 서비스 도메인(`party.push.allowed-hosts`)의 https·기본 포트 주소만 받고 IP 주소(내부망·메타데이터)·계정 정보가 든 주소·허용 목록 밖 도메인은 거절한다. **보낼 때도 저장된 주소를 다시 검증**하고 리디렉션은 따라가지 않는다.
+  - **잘못된 곡선 공격 방지**: 구독의 공개 키(p256dh)가 곡선 위의 점인지 직접 확인한다.
+  - **권한 재확인**: 댓글·공유 알림은 보낼 때 Guard 로 받는 사람이 **지금도 그 지도를 볼 수 있는지** 다시 확인한다(공유가 풀린 사람에게 핀 이름과 댓글이 새지 않게). Guard 가 응답하지 못하면 보내지 않는다.
+  - **개인정보**: 구독 주소와 키는 로그·응답에 남기지 않고(호스트와 상태 코드만 기록), 탈퇴 익명화 때 구독과 알림 설정을 지운다. 같은 기기에 다른 계정으로 로그인하면 구독이 그 계정으로 옮겨지고, **로그아웃할 때 서버에서 이 기기를 먼저 뗀다**(이전 계정 알림이 이 기기로 오지 않게).
+- **구독 정리**: 푸시 서비스가 404/410 을 주면 그 구독을 지우고, 거절(키 불일치 등)이 5번 연속되면 지운다. 일시적 오류(시간 초과·429·5xx)는 구독을 지우지 않는다. 사용자당 기기는 최대 10대(넘으면 가장 오래된 것부터).
+- **알림 내용**: 제목은 핀 이름, 본문은 "작성자: 댓글"(140자로 줄임). 같은 핀의 알림은 같은 `tag`/`Topic` 으로 하나로 합쳐지고, 기기가 꺼져 있는 동안 쌓이지 않는다. 눌렀을 때 앱이 열려 있으면 **새로고침 없이 앱 안에서** 해당 핀으로 이동하고(서비스 워커 → 앱 메시지), 없으면 새 창으로 연다(`./?map=…&pin=…` 딥링크). 앱 범위 밖 주소는 열지 않는다.
+- **서비스 워커**: push·notificationclick 처리는 `public/push-sw.js` 에 두고 workbox 가 만든 서비스 워커가 `importScripts` 로 불러온다(서비스 워커 생성 방식은 그대로 둬서 앱 업데이트 동작에 영향이 없다).
+- **한계**: 아이폰·아이패드는 **홈 화면에 추가한 앱에서만** 받을 수 있다(사파리 탭 불가, 설정 화면이 안내한다). 푸시는 최대 한 번 전달이다(일시 오류 재시도 없음, 기기가 TTL 24시간 넘게 꺼져 있으면 사라짐). 서버에 VAPID 키가 없으면 푸시만 꺼진다.
+- **설정**: `PARTY_VAPID_PUBLIC_KEY`·`PARTY_VAPID_PRIVATE_KEY`·`PARTY_VAPID_SUBJECT`(연락처). `scripts/setup-push-server.sh` 가 키를 만들어 서버 `.env`·compose 에 넣는다(드라이런 기본, 멱등, 개인 키 비출력). 키를 바꾸면 기존 구독은 무효가 되지만 앱을 다시 열면 기기가 새 키로 자동 재구독한다.
 
 ### 앱 업데이트 (PWA)
 - 서비스 워커는 새 버전이 받아지면 바로 활성화한다(`skipWaiting`·`clientsClaim`). 하지만 **이미 떠 있는 화면은 옛 코드 그대로**이고, 홈 화면에 설치한 앱은 며칠씩 다시 로드되지 않아서 새 버전을 오래 못 받는다.
