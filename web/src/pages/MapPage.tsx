@@ -17,6 +17,7 @@ import PlacementBar from '../components/PlacementBar';
 import RecommendationsSheet from '../components/RecommendationsSheet';
 import SharedMapSheet from '../components/SharedMapSheet';
 import { toHeatSpots } from '../map/heat';
+import type { MyLocation } from '../map/myLocation';
 import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
@@ -56,6 +57,8 @@ export default function MapPage() {
   const [sheet, setSheet] = useState<Sheet>(NO_SHEET);
   const [panTo, setPanTo] = useState<(LatLngLiteral & { nonce: number; aboveSheet?: boolean }) | null>(null);
   const [locateError, setLocateError] = useState<string | null>(null);
+  /** 내 위치 버튼으로 확인한 위치(지도에 파란 점으로 보인다). 이 기기 안에서만 쓰고 서버로 보내지 않는다. */
+  const [myLocation, setMyLocation] = useState<MyLocation | null>(null);
   /** 핀을 꽂으려고 지도에서 고른 위치(아직 입력 시트는 열지 않았다) */
   const [placing, setPlacing] = useState<LatLngLiteral | null>(null);
   const mapView = useRef<PartyMapHandle>(null);
@@ -92,6 +95,7 @@ export default function MapPage() {
       useOverlayStore.getState().close();
       setSheet(NO_SHEET);
       setPlacing(null);
+      setMyLocation(null);
     }
   }, [isAuthenticated, loadMaps, reset]);
 
@@ -213,7 +217,11 @@ export default function MapPage() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (position) => setPanTo({ lat: position.coords.latitude, lng: position.coords.longitude, nonce: Date.now() }),
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+        setMyLocation({ lat: latitude, lng: longitude, accuracy });
+        setPanTo({ lat: latitude, lng: longitude, nonce: Date.now() });
+      },
       (failure) => setLocateError(locateErrorMessage(failure.code)),
       { enableHighAccuracy: true, timeout: LOCATE_TIMEOUT_MS },
     );
@@ -247,6 +255,7 @@ export default function MapPage() {
         draft={overlayActive ? null : draft}
         fitKey={fitKey}
         panTo={panTo}
+        myLocation={myLocation}
         colorMode={overlayActive ? 'author' : 'status'}
         heat={heat}
         onMapClick={onMapClick}
