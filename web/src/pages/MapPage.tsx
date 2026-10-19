@@ -21,6 +21,7 @@ import PartyMapView from '../map/PartyMapView';
 import type { LatLngLiteral, PartyMapHandle } from '../map/PartyMapView';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 import { UNREAD_REFRESH_MS } from '../config';
+import { useOpenFromQuery } from '../hooks/useOpenFromQuery';
 import { totalUnread, useCommentStore } from '../store/commentStore';
 import { filterPins, useMapStore } from '../store/mapStore';
 import { readRememberedOverlayMaps, useOverlayStore } from '../store/overlayStore';
@@ -148,16 +149,30 @@ export default function MapPage() {
     void openPinInItsMap(pin).then(() => setPanTo({ lat: pin.lat, lng: pin.lng, nonce: Date.now(), aboveSheet: true }));
   };
 
-  /** 새 댓글이 달린 핀을 누르면 그 핀이 속한 지도를 열고 핀 상세(댓글)를 보여 준다. */
-  const pickUnread = async (item: UnreadPin) => {
+  /** 지도(와 핀)를 열어 상세를 보여 준다. 새 댓글 목록과 알림(푸시)에서 눌렀을 때 쓴다. */
+  const openPinById = useCallback(async (mapId: string, pinId: string | null) => {
     useOverlayStore.getState().close();
-    await selectMap(item.mapId);
-    const found = useMapStore.getState().pins.find((pin) => pin.id === item.pinId);
-    setSheet({ kind: 'pin', pinId: item.pinId });
+    await selectMap(mapId);
+    if (pinId === null) {
+      return;
+    }
+    const found = useMapStore.getState().pins.find((pin) => pin.id === pinId);
+    setSheet({ kind: 'pin', pinId });
     if (found) {
       setPanTo({ lat: found.lat, lng: found.lng, nonce: Date.now(), aboveSheet: true });
     }
-  };
+  }, [selectMap]);
+
+  /** 새 댓글이 달린 핀을 누르면 그 핀이 속한 지도를 열고 핀 상세(댓글)를 보여 준다. */
+  const pickUnread = (item: UnreadPin) => openPinById(item.mapId, item.pinId);
+
+  // 알림을 눌러 들어왔을 때(?map=&pin=): 그 지도와 핀을 연다
+  const mapIds = useMemo(() => maps.map((candidate) => candidate.id), [maps]);
+  useOpenFromQuery({
+    ready: isAuthenticated && mapsLoaded,
+    knownMapIds: mapIds,
+    onOpen: (mapId, pinId) => void openPinById(mapId, pinId),
+  });
 
   /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
   const pickRecommendation = (place: RecommendedPlace) => {

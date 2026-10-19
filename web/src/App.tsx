@@ -2,6 +2,8 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { ROUTER_BASENAME } from './config';
 import Header from './components/Header';
 import LoginErrorNotice from './components/LoginErrorNotice';
+import NotificationSettingsHost from './components/NotificationSettingsSheet';
+import PushSync from './components/PushSync';
 import TabBar from './components/TabBar';
 import ComingSoonPage from './pages/ComingSoonPage';
 import FriendMapsPage from './pages/FriendMapsPage';
@@ -16,9 +18,10 @@ export default function App() {
   return (
     <BrowserRouter basename={ROUTER_BASENAME}>
       <div className="flex h-dvh flex-col">
+        <PushSync />
         <Header />
         <LoginErrorNotice />
-        <main className="min-h-0 flex-1">
+        <main className="relative min-h-0 flex-1">
           <Routes>
             <Route path="/" element={<MapPage />} />
             <Route path="/friends" element={<FriendsPage />} />
@@ -29,6 +32,7 @@ export default function App() {
             <Route path="/join/:code" element={<JoinGroupPage />} />
             <Route path="*" element={<ComingSoonPage title="없는 페이지예요" description="주소를 확인하거나 아래 메뉴로 이동해 주세요." />} />
           </Routes>
+          <NotificationSettingsHost />
         </main>
         <TabBar />
       </div>

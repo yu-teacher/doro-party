@@ -1,10 +1,23 @@
-import { House, LogIn, LogOut } from 'lucide-react';
+import { Bell, BellRing, House, LogIn, LogOut } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { detachThisDevice } from '../push/pushClient';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
+import { usePushStore } from '../store/pushStore';
 
 export default function Header() {
   const { user, isAuthenticated, signOut } = useAuthStore();
   const { pathname, search } = useLocation();
+  const pushOn = usePushStore((state) => state.status === 'on');
+
+  /** 로그아웃 전에 이 기기를 내 계정의 알림 기기에서 뗀다(실패해도 로그아웃은 한다). */
+  const logOut = async () => {
+    try {
+      await detachThisDevice();
+    } catch (failure) {
+      console.warn('Failed to detach push device before sign out', failure);
+    }
+    await signOut();
+  };
 
   return (
     <header className="flex items-center justify-between border-b border-slate-800 bg-slate-900 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
@@ -28,7 +41,15 @@ export default function Header() {
           </span>
           <button
             type="button"
-            onClick={() => void signOut()}
+            onClick={() => usePushStore.getState().openSettings()}
+            className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            aria-label="알림 설정"
+          >
+            {pushOn ? <BellRing size={18} className="text-teal-300" /> : <Bell size={18} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => void logOut()}
             className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
             aria-label="로그아웃"
           >

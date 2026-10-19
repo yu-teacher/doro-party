@@ -36,7 +36,7 @@ export default function Sheet({ title, onClose, children }: Props) {
     >
       <div className="sticky top-0 flex items-center justify-between bg-slate-900 px-4 pb-2 pt-3">
         <h2 className="text-base font-semibold text-slate-100">{title}</h2>
-        <button type="button" onClick={onClose} className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100" aria-label="닫기">
+        <button type="button" onClick={onClose} className="rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-100" aria-label="닫기">
           <X size={18} />
         </button>
       </div>
