@@ -11,7 +11,8 @@ export interface PinComments {
   loading: boolean;
   /** 댓글을 불러오지 못했을 때의 안내 문구 */
   error: string | null;
-  add: (body: string) => Promise<void>;
+  /** parentId 가 있으면 그 댓글에 대한 답글이다 */
+  add: (body: string, parentId?: string) => Promise<void>;
   edit: (commentId: string, body: string) => Promise<void>;
   remove: (commentId: string) => Promise<void>;
 }
@@ -106,9 +107,9 @@ export function usePinComments(mapId: string, pinId: string): PinComments {
   }, [load]);
 
   const add = useCallback(
-    async (body: string) => {
+    async (body: string, parentId?: string) => {
       mutations.current += 1;
-      const created = await commentsApi.addComment(mapId, pinId, body);
+      const created = await commentsApi.addComment(mapId, pinId, body, parentId);
       mutations.current += 1;
       setComments((previous) => [...previous, created]);
       await reloadPins();
@@ -131,7 +132,9 @@ export function usePinComments(mapId: string, pinId: string): PinComments {
       mutations.current += 1;
       await commentsApi.deleteComment(mapId, pinId, commentId);
       mutations.current += 1;
-      setComments((previous) => previous.filter((comment) => comment.id !== commentId));
+      // 답글이 달린 댓글은 목록에서 사라지는 대신 "삭제된 댓글" 로 바뀌고, 마지막 답글을 지우면 지워진 원글도 함께 사라진다.
+      // 어느 쪽이 될지는 서버가 정하므로 지운 뒤에는 목록을 다시 받아 온다.
+      setComments(await commentsApi.listComments(mapId, pinId));
       await reloadPins();
     },
     [mapId, pinId, reloadPins],

@@ -20,8 +20,15 @@ public interface PinCommentRepository extends JpaRepository<PinComment, UUID> {
     long countByPinId(UUID pinId);
 
     /** 이 핀에 댓글을 남긴 적이 있는 사람들(푸시를 받을 참여자 계산용). */
-    @Query("select distinct c.userId from PinComment c where c.pinId = :pinId")
+    @Query("select distinct c.userId from PinComment c where c.pinId = :pinId and c.deletedAt is null")
     List<UUID> findAuthorIdsOfPin(@Param("pinId") UUID pinId);
+
+    /** 한 스레드(맨 위 댓글과 그 답글들)에 글을 남긴 사람들. 지워진 댓글의 작성자는 뺀다. */
+    @Query("select distinct c.userId from PinComment c where (c.id = :rootId or c.parentId = :rootId) and c.deletedAt is null")
+    List<UUID> findAuthorIdsOfThread(@Param("rootId") UUID rootId);
+
+    /** 이 댓글에 달린 답글이 있는지(지울 때 "삭제된 댓글" 로 남길지 정한다). */
+    boolean existsByParentId(UUID parentId);
 
     interface CommentCount {
         UUID getPinId();
@@ -29,7 +36,8 @@ public interface PinCommentRepository extends JpaRepository<PinComment, UUID> {
         long getCount();
     }
 
-    @Query("select c.pinId as pinId, count(c) as count from PinComment c where c.pinId in :pinIds group by c.pinId")
+    /** 핀 목록에 보이는 댓글 수: 지워진 댓글(답글 때문에 남겨 둔 것)은 세지 않는다. */
+    @Query("select c.pinId as pinId, count(c) as count from PinComment c where c.pinId in :pinIds and c.deletedAt is null group by c.pinId")
     List<CommentCount> countsByPinIds(@Param("pinIds") Collection<UUID> pinIds);
 
     /** 읽은 시각은 앞으로만 간다(오래된 요청이 나중에 도착해도 되돌리지 않는다). */
@@ -59,7 +67,8 @@ public interface PinCommentRepository extends JpaRepository<PinComment, UUID> {
             JOIN pins p ON p.id = c.pin_id
             LEFT JOIN pin_comment_reads r ON r.pin_id = c.pin_id AND r.user_id = :userId
             WHERE c.user_id <> :userId
-              AND (p.created_by = :userId OR EXISTS (SELECT 1 FROM pin_comments mine WHERE mine.pin_id = c.pin_id AND mine.user_id = :userId))
+              AND c.deleted_at IS NULL
+              AND (p.created_by = :userId OR EXISTS (SELECT 1 FROM pin_comments mine WHERE mine.pin_id = c.pin_id AND mine.user_id = :userId AND mine.deleted_at IS NULL))
               AND (r.last_read_at IS NULL OR c.created_at > r.last_read_at)
             GROUP BY c.pin_id, p.map_id, p.name
             ORDER BY max(c.created_at) DESC, c.pin_id

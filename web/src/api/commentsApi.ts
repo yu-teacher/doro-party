@@ -14,8 +14,9 @@ export async function listComments(mapId: string, pinId: string, signal?: AbortS
   return response.data.data;
 }
 
-export async function addComment(mapId: string, pinId: string, body: string): Promise<PinComment> {
-  const response = await apiClient.post<Envelope<PinComment>>(commentsPath(mapId, pinId), { body });
+/** 댓글을 남긴다. parentId 가 있으면 그 댓글에 대한 답글이다(맨 위 댓글이든 답글이든 된다). */
+export async function addComment(mapId: string, pinId: string, body: string, parentId?: string): Promise<PinComment> {
+  const response = await apiClient.post<Envelope<PinComment>>(commentsPath(mapId, pinId), parentId === undefined ? { body } : { body, parentId });
   return response.data.data;
 }
 

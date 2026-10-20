@@ -40,19 +40,55 @@ public class PushDispatcher {
             return;
         }
         run("comment", () -> {
-            Set<UUID> recipients = new LinkedHashSet<>(comments.findAuthorIdsOfPin(event.pinId()));
-            recipients.add(event.pinCreatorId());
-            recipients.remove(event.authorId());
-            PushMessage message = new PushMessage(
-                    event.pinName(),
-                    event.authorNickname() + ": " + event.body(),
-                    "./?map=" + event.mapId() + "&pin=" + event.pinId(),
-                    "comment:" + event.pinId());
-            for (UUID recipient : recipients) {
-                // 지금도 이 지도를 볼 수 있는 사람에게만 보낸다(공유가 풀린 사람에게 핀 이름과 댓글이 새지 않게)
-                deliver(recipient, message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
+            if (event.rootCommentId() == null) {
+                notifyNewComment(event);
+            } else {
+                notifyReply(event);
             }
         });
+    }
+
+    /** 맨 위 댓글: 핀을 꽂은 사람과 그 핀에 댓글을 남긴 사람. */
+    private void notifyNewComment(CommentPosted event) {
+        Set<UUID> recipients = new LinkedHashSet<>(comments.findAuthorIdsOfPin(event.pinId()));
+        recipients.add(event.pinCreatorId());
+        recipients.remove(event.authorId());
+        PushMessage message = new PushMessage(
+                event.pinName(),
+                event.authorNickname() + ": " + event.body(),
+                commentUrl(event, event.commentId()),
+                "comment:" + event.pinId());
+        for (UUID recipient : recipients) {
+            // 지금도 이 지도를 볼 수 있는 사람에게만 보낸다(공유가 풀린 사람에게 핀 이름과 댓글이 새지 않게)
+            deliver(recipient, message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
+        }
+    }
+
+    /**
+     * 답글: 답한 상대에게는 "내 댓글에 답글" 로 알리고, 그 스레드에 글을 남긴 사람들과 핀을 꽂은 사람에게는 일반 알림으로 알린다.
+     * 다른 스레드에만 참여한 사람에게는 보내지 않는다(모든 답글이 모두에게 가면 소음이 된다). 같은 스레드의 알림은 하나로 합쳐진다.
+     */
+    private void notifyReply(CommentPosted event) {
+        Set<UUID> others = new LinkedHashSet<>(comments.findAuthorIdsOfThread(event.rootCommentId()));
+        others.add(event.pinCreatorId());
+        UUID direct = event.replyToUserId();
+        others.remove(event.authorId());
+        others.remove(direct);
+        String url = commentUrl(event, event.commentId());
+        String tag = "reply:" + event.rootCommentId();
+        if (direct != null && !direct.equals(event.authorId())) {
+            PushMessage message = new PushMessage(event.pinName(), event.authorNickname() + "님이 내 댓글에 답글: " + event.body(), url, tag);
+            deliver(direct, message, prefs -> prefs.comments(), canView(event.mapId(), direct));
+        }
+        PushMessage message = new PushMessage(event.pinName(), event.authorNickname() + "(답글): " + event.body(), url, tag);
+        for (UUID recipient : others) {
+            deliver(recipient, message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
+        }
+    }
+
+    /** 알림을 누르면 그 핀을 열고 해당 댓글로 이동한다. */
+    private static String commentUrl(CommentPosted event, UUID commentId) {
+        return "./?map=" + event.mapId() + "&pin=" + event.pinId() + "&comment=" + commentId;
     }
 
     @Async("pushExecutor")

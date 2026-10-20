@@ -43,6 +43,8 @@ export default function PushSync() {
         const path = toRouterPath(event.data.url, window.location.origin, ROUTER_BASENAME);
         if (path !== null) {
           navigate(path);
+          // 서비스 워커는 이 답이 없으면(이동 메시지를 처리하지 못하는 옛 버전 화면 등) 주소로 직접 이동시킨다
+          event.ports[0]?.postMessage('handled');
         }
       }
     };

@@ -18,7 +18,7 @@ const reloadPins = vi.fn().mockResolvedValue(undefined);
 const loadUnread = vi.fn().mockResolvedValue(undefined);
 
 function comment(id: string, createdAt: string): PinComment {
-  return { id, pinId: 'p', userId: 'u', authorNickname: '친구', authorColor: '#14B8A6', body: id, createdAt, editedAt: null };
+  return { id, pinId: 'p', userId: 'u', authorNickname: '친구', authorColor: '#14B8A6', body: id, createdAt, editedAt: null, parentId: null, replyToNickname: null, deleted: false };
 }
 
 let latest: PinComments;
@@ -96,7 +96,7 @@ describe('핀 댓글 훅', () => {
     api.deleteComment.mockResolvedValue(undefined);
 
     await act(async () => latest.add('안녕'));
-    expect(api.addComment).toHaveBeenCalledWith('m', 'p', '안녕');
+    expect(api.addComment).toHaveBeenCalledWith('m', 'p', '안녕', undefined);
     expect(latest.comments.map((c) => c.id)).toEqual(['new']);
     expect(reloadPins).toHaveBeenCalledTimes(1);
 
@@ -231,5 +231,46 @@ describe('핀 댓글 자동 갱신', () => {
     await tick(COMMENT_REFRESH_MS * 3);
 
     expect(api.listComments).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('답글과 삭제', () => {
+  it('답글을 달면 부모 댓글의 id 와 함께 보내고 목록 끝에 붙는다', async () => {
+    api.listComments.mockResolvedValue([comment('root', '2026-10-09T01:00:00Z')]);
+    api.markCommentsRead.mockResolvedValue(undefined);
+    await mount();
+    api.addComment.mockResolvedValue({ ...comment('reply', '2026-10-09T02:00:00Z'), parentId: 'root', replyToNickname: '친구' });
+
+    await act(async () => latest.add('답글이에요', 'root'));
+
+    expect(api.addComment).toHaveBeenCalledWith('m', 'p', '답글이에요', 'root');
+    expect(latest.comments.map((c) => c.id)).toEqual(['root', 'reply']);
+    expect(latest.comments[1].parentId).toBe('root');
+  });
+
+  it('지운 뒤에는 목록을 다시 받아 온다(답글이 달린 댓글은 사라지지 않고 삭제된 댓글로 바뀐다)', async () => {
+    api.listComments.mockResolvedValueOnce([comment('root', '2026-10-09T01:00:00Z'), { ...comment('reply', '2026-10-09T02:00:00Z'), parentId: 'root' }]);
+    api.markCommentsRead.mockResolvedValue(undefined);
+    await mount();
+    api.deleteComment.mockResolvedValue(undefined);
+    api.listComments.mockResolvedValueOnce([{ ...comment('root', '2026-10-09T01:00:00Z'), deleted: true, body: '', userId: null }, { ...comment('reply', '2026-10-09T02:00:00Z'), parentId: 'root' }]);
+
+    await act(async () => latest.remove('root'));
+
+    expect(latest.comments).toHaveLength(2);
+    expect(latest.comments[0].deleted).toBe(true);
+    expect(reloadPins).toHaveBeenCalled();
+  });
+
+  it('마지막 답글을 지우면 서버가 지워진 원글도 정리하므로 둘 다 목록에서 빠진다', async () => {
+    api.listComments.mockResolvedValueOnce([{ ...comment('root', '2026-10-09T01:00:00Z'), deleted: true }, { ...comment('reply', '2026-10-09T02:00:00Z'), parentId: 'root' }]);
+    api.markCommentsRead.mockResolvedValue(undefined);
+    await mount();
+    api.deleteComment.mockResolvedValue(undefined);
+    api.listComments.mockResolvedValueOnce([]);
+
+    await act(async () => latest.remove('reply'));
+
+    expect(latest.comments).toEqual([]);
   });
 });

@@ -82,17 +82,26 @@ export interface Visit {
   createdAt: string;
 }
 
-/** 핀에 남긴 댓글. 지도를 볼 수 있는 사람이면 누구나 보고 쓴다 */
+/**
+ * 핀에 남긴 댓글(또는 답글). 답글은 한 단계만 있다: 답글(parentId 가 있다)은 맨 위 댓글 아래에 붙는다.
+ * 답글이 달려 있어 남겨 둔 지워진 댓글(deleted)은 내용과 작성자를 숨긴다.
+ */
 export interface PinComment {
   id: string;
   pinId: string;
-  userId: string;
+  /** 지워진 댓글이면 null */
+  userId: string | null;
   authorNickname: string;
   authorColor: string;
   body: string;
   createdAt: string;
   /** 고친 적이 없으면 null */
   editedAt: string | null;
+  /** 답글이면 속한 맨 위 댓글의 id, 맨 위 댓글이면 null */
+  parentId: string | null;
+  /** 답글이면 누구에게 답한 글인지(닉네임) */
+  replyToNickname: string | null;
+  deleted: boolean;
 }
 
 /** 읽지 않은 댓글이 있는 핀(내가 꽂았거나 내가 댓글을 남긴 핀) */

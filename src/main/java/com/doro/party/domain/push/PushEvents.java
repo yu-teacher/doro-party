@@ -11,8 +11,12 @@ public final class PushEvents {
     private PushEvents() {
     }
 
-    /** 핀에 댓글이 달렸다. 받는 사람은 핀을 꽂은 사람과 그 핀에 댓글을 남긴 사람(쓴 사람 제외). */
-    public record CommentPosted(UUID mapId, UUID pinId, String pinName, UUID pinCreatorId, UUID authorId, String authorNickname, String body) {
+    /**
+     * 핀에 댓글이 달렸다. 맨 위 댓글이면 받는 사람은 핀을 꽂은 사람과 그 핀에 댓글을 남긴 사람(쓴 사람 제외).
+     * 답글이면(rootCommentId 가 있다) 답한 상대, 그 스레드에 글을 남긴 사람들, 핀을 꽂은 사람이 받는다.
+     */
+    public record CommentPosted(UUID mapId, UUID pinId, String pinName, UUID pinCreatorId, UUID authorId, String authorNickname, String body,
+                                UUID commentId, UUID rootCommentId, UUID replyToUserId) {
     }
 
     public record FriendRequested(UUID toUserId, String fromNickname) {

@@ -50,7 +50,18 @@ afterEach(() => {
 });
 
 const mount = () => act(async () => root.render(<MemoryRouter initialEntries={['/']}><PushSync /><Where /></MemoryRouter>));
-const post = (data: unknown) => act(async () => { worker.dispatchEvent(new MessageEvent('message', { data })); });
+const post = (data: unknown, ports: MessagePort[] = []) => act(async () => { worker.dispatchEvent(new MessageEvent('message', { data, ports })); });
+
+/** 서비스 워커처럼 이동 메시지에 응답용 포트를 실어 보내고, 앱이 보낸 응답을 모은다. */
+async function postOpen(url: string | undefined): Promise<string[]> {
+  const channel = new MessageChannel();
+  const replies: string[] = [];
+  channel.port1.onmessage = (event: MessageEvent<string>) => { replies.push(event.data); };
+  await post({ type: 'party-open', url }, [channel.port2]);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  channel.port1.close();
+  return replies;
+}
 
 describe('로그인과 알림 연결', () => {
   it('로그인하면 이 기기의 알림 상태를 확인하고, 로그아웃하면 비운다', async () => {
@@ -88,6 +99,25 @@ describe('로그인과 알림 연결', () => {
     await post('not an object');
     expect(where).toBe('/');
     expect(loadUnread).not.toHaveBeenCalled();
+  });
+
+  it('이동했으면 서비스 워커에 처리했다고 답한다(답이 없으면 서비스 워커가 주소로 직접 이동시킨다)', async () => {
+    await mount();
+    expect(await postOpen(`${window.location.origin}/party/?map=m1&pin=p1`)).toEqual(['handled']);
+    expect(where).toBe('/?map=m1&pin=p1');
+  });
+
+  it('이동하지 않은(앱 범위 밖 주소, 주소 없음) 메시지에는 답하지 않는다', async () => {
+    await mount();
+    expect(await postOpen('https://evil.test/party/friends')).toEqual([]);
+    expect(await postOpen(undefined)).toEqual([]);
+    expect(where).toBe('/');
+  });
+
+  it('응답용 포트가 없는 메시지(옛 서비스 워커)도 오류 없이 이동한다', async () => {
+    await mount();
+    await post({ type: 'party-open', url: `${window.location.origin}/party/friends` });
+    expect(where).toBe('/friends');
   });
 
   it('서비스 워커가 없는 환경에서도 오류 없이 그린다', async () => {
