@@ -71,16 +71,61 @@ self.addEventListener('push', (event) => {
   );
 });
 
+/** 앱 창이 이동 메시지를 받았다고 답하길 기다리는 시간(ms). 이 안에 답이 없으면(옛 버전 화면 등) 주소로 직접 이동시킨다. */
+const OPEN_ACK_TIMEOUT_MS = 800;
+
+/** 이 앱의 창이 여럿이면 지금 보고 있는 창(포커스 > 보이는 창 > 첫 창)을 고른다. */
+function pickAppWindow(windows) {
+  const scope = self.registration.scope;
+  const mine = windows.filter((client) => client.url.startsWith(scope));
+  return mine.find((client) => client.focused) || mine.find((client) => client.visibilityState === 'visible') || mine[0];
+}
+
+/** 앱 창에 이동 메시지를 보내고, 창이 처리했다고 답하면 true(답이 없으면 시간이 지난 뒤 false). */
+function askToOpen(client, target) {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => resolve(false), OPEN_ACK_TIMEOUT_MS);
+    channel.port1.onmessage = () => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(true);
+    };
+    client.postMessage({ type: MESSAGE_OPEN, url: target }, [channel.port2]);
+  });
+}
+
+/**
+ * 알림을 누르면 해당 화면으로 반드시 가게 한다.
+ *  1) 열려 있는 앱 창이 있으면 앞으로 가져오고(실패해도 계속), 앱 안에서 이동하라고 알린다(새로고침 없이).
+ *  2) 창이 처리했다고 답하지 않으면(옛 버전 화면, 메시지를 못 받는 상태) 그 창을 주소로 직접 이동시킨다.
+ *  3) 그것도 안 되거나 열린 창이 없으면 새 창으로 연다.
+ */
+async function openTarget(target) {
+  const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+  const open = pickAppWindow(windows);
+  if (!open) {
+    return self.clients.openWindow(target);
+  }
+  try {
+    await open.focus();
+  } catch (error) {
+    console.warn('Could not focus the app window', error);
+  }
+  if (await askToOpen(open, target)) {
+    return undefined;
+  }
+  try {
+    if (await open.navigate(target)) {
+      return undefined;
+    }
+  } catch (error) {
+    console.warn('Could not navigate the app window', error);
+  }
+  return self.clients.openWindow(target);
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const target = resolveTarget(event.notification.data && event.notification.data.url);
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      const open = windows.find((client) => client.url.startsWith(self.registration.scope));
-      if (open) {
-        return open.focus().then(() => open.postMessage({ type: MESSAGE_OPEN, url: target }));
-      }
-      return self.clients.openWindow(target);
-    }),
-  );
+  event.waitUntil(openTarget(resolveTarget(event.notification.data && event.notification.data.url)));
 });

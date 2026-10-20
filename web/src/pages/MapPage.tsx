@@ -173,7 +173,8 @@ export default function MapPage() {
   // 알림을 눌러 들어왔을 때(?map=&pin=): 그 지도와 핀을 연다
   const mapIds = useMemo(() => maps.map((candidate) => candidate.id), [maps]);
   useOpenFromQuery({
-    ready: isAuthenticated && mapsLoaded,
+    // 불러오기에 실패했을 때(폰이 막 깨어나 네트워크가 아직 안 붙은 경우 등)는 "볼 수 없는 지도" 로 오해해 알림을 버리지 않고, 다시 시도해 성공하면 연다
+    ready: isAuthenticated && mapsLoaded && !error,
     knownMapIds: mapIds,
     onOpen: (mapId, pinId) => void openPinById(mapId, pinId),
   });
@@ -337,8 +338,9 @@ export default function MapPage() {
         <MapNotice title="겹칠 핀이 없어요">고른 지도에 아직 핀이 없어요. 위의 지도 고르기에서 다른 지도를 골라 보세요.</MapNotice>
       )}
 
+      {/* 오른쪽 아래의 둥근 버튼 줄(새 댓글·내 주변·내 위치)에 "다시 시도" 가 가려지지 않도록 그 폭만큼 비운다 */}
       {error && (
-        <div role="alert" className="absolute inset-x-3 bottom-4 z-10 mx-auto flex max-w-md items-center justify-between gap-3 rounded-xl bg-rose-500/90 px-4 py-3 text-sm text-white shadow-lg">
+        <div role="alert" className="absolute bottom-4 left-3 right-[4.5rem] z-10 mr-auto flex max-w-md items-center justify-between gap-3 rounded-xl bg-rose-500/90 px-4 py-3 text-sm text-white shadow-lg">
           <span>{error}</span>
           <button type="button" onClick={() => void loadMaps()} className="shrink-0 font-semibold underline">다시 시도</button>
         </div>
