@@ -9,7 +9,7 @@ interface Props {
 }
 
 const PREFERENCE_LABELS: ReadonlyArray<{ key: keyof PushPreferences; label: string; hint: string }> = [
-  { key: 'comments', label: '댓글', hint: '내가 꽂았거나 내가 댓글을 남긴 핀에 새 댓글이 달렸을 때' },
+  { key: 'comments', label: '댓글·답글', hint: '내가 꽂았거나 댓글을 남긴 핀에 새 댓글이 달렸을 때, 내 댓글에 답글이 달렸을 때' },
   { key: 'friendRequests', label: '친구', hint: '친구 요청을 받았거나 내 요청이 수락됐을 때' },
   { key: 'shares', label: '지도 공유', hint: '친구가 내게 지도를 공유했을 때' },
 ];

@@ -35,6 +35,8 @@ interface ViewProps {
   readOnly?: boolean;
   /** readOnly 일 때 이 핀이 속한 지도를 열어 수정할 수 있게 한다 */
   onOpenInMap?: (pin: Pin) => void;
+  /** 알림을 눌러 들어왔을 때 보여 줄 댓글(그 댓글로 스크롤하고 강조한다) */
+  focusCommentId?: string | null;
 }
 
 const STATUS_LABEL = { WISH: '가고 싶어요', VISITED: '다녀왔어요' } as const;
@@ -106,7 +108,7 @@ function CreatePin({ lat, lng, onCreated, onClose }: CreateProps) {
   );
 }
 
-function ViewPin({ pin, onClose, readOnly = false, onOpenInMap }: ViewProps) {
+function ViewPin({ pin, onClose, readOnly = false, onOpenInMap, focusCommentId = null }: ViewProps) {
   const { editPin, removePin, savePrivateNote, deletePrivateNote } = useMapStore.getState();
   const isMapOwner = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.mine ?? false);
   const role = useMapStore((state) => state.maps.find((map) => map.id === pin.mapId)?.role);
@@ -196,6 +198,7 @@ function ViewPin({ pin, onClose, readOnly = false, onOpenInMap }: ViewProps) {
           loadError={pinComments.error}
           currentUserId={currentUserId}
           canDelete={(comment) => comment.userId === currentUserId || pin.createdBy === currentUserId || isMapOwner}
+          focusCommentId={focusCommentId}
           onAdd={pinComments.add}
           onEdit={pinComments.edit}
           onDelete={pinComments.remove}

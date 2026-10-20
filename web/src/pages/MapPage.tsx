@@ -34,7 +34,7 @@ import { collectTags } from '../utils/tags';
 type Sheet =
   | { kind: 'none' }
   | { kind: 'new-pin'; lat: number; lng: number }
-  | { kind: 'pin'; pinId: string }
+  | { kind: 'pin'; pinId: string; commentId?: string | null }
   | { kind: 'new-map' }
   | { kind: 'map-settings' }
   | { kind: 'map-share' }
@@ -154,14 +154,14 @@ export default function MapPage() {
   };
 
   /** 지도(와 핀)를 열어 상세를 보여 준다. 새 댓글 목록과 알림(푸시)에서 눌렀을 때 쓴다. */
-  const openPinById = useCallback(async (mapId: string, pinId: string | null) => {
+  const openPinById = useCallback(async (mapId: string, pinId: string | null, commentId: string | null = null) => {
     useOverlayStore.getState().close();
     await selectMap(mapId);
     if (pinId === null) {
       return;
     }
     const found = useMapStore.getState().pins.find((pin) => pin.id === pinId);
-    setSheet({ kind: 'pin', pinId });
+    setSheet({ kind: 'pin', pinId, commentId });
     if (found) {
       setPanTo({ lat: found.lat, lng: found.lng, nonce: Date.now(), aboveSheet: true });
     }
@@ -176,7 +176,7 @@ export default function MapPage() {
     // 불러오기에 실패했을 때(폰이 막 깨어나 네트워크가 아직 안 붙은 경우 등)는 "볼 수 없는 지도" 로 오해해 알림을 버리지 않고, 다시 시도해 성공하면 연다
     ready: isAuthenticated && mapsLoaded && !error,
     knownMapIds: mapIds,
-    onOpen: (mapId, pinId) => void openPinById(mapId, pinId),
+    onOpen: (mapId, pinId, commentId) => void openPinById(mapId, pinId, commentId),
   });
 
   /** 추천 장소를 누르면 그 장소로 지도를 옮기고, 거기 모인 핀들을 목록으로 보여 준다. */
@@ -410,7 +410,7 @@ export default function MapPage() {
         <PinSheet mode="create" lat={sheet.lat} lng={sheet.lng} onCreated={(pin) => setSheet({ kind: 'pin', pinId: pin.id })} onClose={closeSheet} />
       )}
       {sheet.kind === 'pin' && openedPin && (
-        <PinSheet mode="view" pin={openedPin} onClose={closeSheet} readOnly={overlayActive} onOpenInMap={overlayActive ? (pin) => void openPinInItsMap(pin) : undefined} />
+        <PinSheet mode="view" pin={openedPin} onClose={closeSheet} readOnly={overlayActive} onOpenInMap={overlayActive ? (pin) => void openPinInItsMap(pin) : undefined} focusCommentId={sheet.kind === 'pin' ? sheet.commentId ?? null : null} />
       )}
       {sheet.kind === 'new-map' && <MapFormSheet map={null} onClose={closeSheet} />}
       {sheet.kind === 'map-settings' && selectedMap && (
