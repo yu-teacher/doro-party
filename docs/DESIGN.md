@@ -74,7 +74,7 @@ PWA는 service worker 때문에 **HTTPS 필수**이고, 카카오맵 JS 키는 �
 | `pin_tags` | pin_id, tag |
 | `pin_photos` | id, pin_id, uploaded_by, object_key, content_type(서버가 판별), size_bytes |
 | `visit_logs` | id, pin_id, user_id, visited_on, note |
-| `pin_comments` | id, pin_id, user_id, body(≤500), created_at, edited_at |
+| `pin_comments` | id, pin_id, user_id, body(≤500), created_at, edited_at, **parent_id**(답글이 속한 맨 위 댓글, 맨 위 댓글이면 NULL), **reply_to_user_id**(답한 상대), **deleted_at**(답글이 달린 댓글을 지운 표시) |
 | `pin_comment_reads` | (pin_id, user_id), last_read_at — 이 시각까지의 댓글을 읽었다는 표시 |
 | `push_subscriptions` | id, user_id, endpoint(unique), p256dh, auth, user_agent, last_success_at, failure_count — 기기(브라우저)마다 하나. endpoint 는 서버가 대신 접속하는 주소라 비밀로 다룬다 |
 | `push_preferences` | user_id, comments, friend_requests, shares — 알림 종류별 켜기/끄기(행이 없으면 모두 켜짐) |
@@ -136,7 +136,7 @@ type party_map {
 | 지도 | `POST/GET /maps`, `GET/PATCH/DELETE /maps/{id}`, `PUT/DELETE /maps/{id}/shares/{userId}` |
 | 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
 | 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
-| 핀 댓글 | `GET/POST /maps/{id}/pins/{pinId}/comments`, `PATCH/DELETE .../comments/{commentId}`, `POST .../comments/read {upTo}`(읽음 표시), `GET /comments/unread`(새 댓글이 달린 내 핀) |
+| 핀 댓글 | `GET/POST /maps/{id}/pins/{pinId}/comments`(POST 의 `parentId` 가 있으면 답글), `PATCH/DELETE .../comments/{commentId}`, `POST .../comments/read {upTo}`(읽음 표시), `GET /comments/unread`(새 댓글이 달린 내 핀) |
 | 푸시 알림 | `GET /push/config`(켜져 있는지, 공개 키), `PUT/DELETE /push/subscription`(이 기기 등록·해제), `GET/PUT /push/preferences`(알림 종류), `POST /push/test`(시험 알림) |
 | 사적 메모 | `GET /maps/{id}/private-notes`(내 것 전체), `PUT/DELETE /maps/{id}/pins/{pinId}/private-note` |
 | 사진 | `POST/GET /maps/{id}/pins/{pinId}/photos`(multipart `file`), `GET .../photos/{photoId}/content`, `DELETE .../photos/{photoId}` |
@@ -205,6 +205,9 @@ presigned URL 직접 업로드 대신 이 방식을 고른 이유: 서버가 파
 ### 핀 댓글
 - **누가 쓰나**: 지도를 볼 수 있는 사람(viewer 이상) 누구나. 핀을 못 꽂는 보기 전용 사람도 "웨이팅 길어요" 같은 말을 남길 수 있어야 앱 안에서 소통이 되기 때문이다. Guard 에 새 관계를 만들지 않고 기존 `party_map#viewer` 를 그대로 쓴다. 겹쳐보기에서 연 핀에도 쓸 수 있다.
 - **고치기·지우기**: 고치는 것은 쓴 사람만. 지우는 것은 쓴 사람, 그 핀을 꽂은 사람, 지도 주인. 지도 주인이라도 남의 글을 바꿔 쓸 수는 없다.
+- **대댓글(한 단계)**: 댓글에 답글을 달 수 있다. 답글의 답글은 같은 맨 위 댓글에 붙고(`parent_id` 는 항상 맨 위 댓글), 누구에게 답한 글인지(`reply_to_user_id`)를 `@닉네임` 으로 보여 준다. 답할 댓글은 **그 핀의 댓글이어야 하고**(다른 핀의 댓글이면 없는 것으로 본다) 지워진 댓글에는 달 수 없다. 권한은 그대로 viewer 이상이다.
+- **삭제와 '삭제된 댓글'**: 답글이 달린 댓글을 지우면 **행은 남기고 내용만 비운 채 '삭제된 댓글이에요'** 로 보여 준다(남의 답글이 함께 사라지지 않게). 작성자도 숨긴다(응답의 `userId` 는 null). 답글이 없는 댓글과 답글은 그냥 지우고, 지워진 원글에 남은 답글이 없어지면 그 원글도 함께 정리한다. 지워진 댓글은 고칠 수도 다시 지울 수도 없고(404), 댓글 수·새 댓글·알림 참여자 계산에서 빠진다. 같은 핀의 작성과 삭제는 핀 행을 잠가 직렬화한다(답하는 순간 원글이 지워지는 경합 방지).
+- **답글 알림**: 답한 상대에게는 "님이 내 댓글에 답글" 로, **그 스레드에 글을 남긴 사람들과 핀을 꽂은 사람**에게는 일반 답글 알림으로 보낸다. 다른 스레드에만 참여한 사람에게는 보내지 않는다(모든 답글이 모두에게 가면 소음). 한 사람이 두 역할이면 직접 알림 한 번만 간다. 같은 스레드의 알림은 같은 `tag`(`reply:{맨 위 댓글}`)로 합쳐지고, 알림을 누르면 앱이 그 핀을 열고 **그 댓글로 스크롤해 잠깐 강조**한다(`&comment=`). 알림 종류는 기존 "댓글" 설정을 따른다.
 - **새 댓글(읽지 않음)**: 알림을 받는 대상은 **그 핀을 꽂은 사람과 그 핀에 댓글을 남긴 사람**뿐이다. 지도를 볼 수 있다고 모든 핀의 알림을 받게 하면 금방 소음이 된다. 읽음 표시는 핀·사용자 한 쌍에 시각 하나(`last_read_at`)이고, 클라이언트가 **화면에 본 마지막 댓글의 시각(`upTo`)** 을 보내면 `GREATEST` 로 앞으로만 움직인다. 서버 시계로 "지금" 을 찍으면 읽기와 쓰기가 겹칠 때 안 본 댓글이 읽힌 것으로 처리될 수 있어서다. 내가 쓴 댓글은 읽음 표시와 상관없이 새 댓글로 세지 않는다. 시각은 DB 정밀도(마이크로초)에 맞춰 저장해 비교가 어긋나지 않게 한다.
 - **볼 수 없게 된 지도**: 새 댓글 목록은 지도마다 Guard 로 viewer 를 다시 확인하고 빠진 지도의 핀은 제외한다(핀 이름이 새지 않는다). Guard 가 응답하지 못하면 "없음" 으로 오해하지 않고 503 으로 전파한다. 한 번에 최대 50개 핀.
 - **상한과 삭제**: 핀마다 댓글 최대 500개(`PARTY_MAX_COMMENTS_PER_PIN`, 핀 행을 잠그고 검사). 핀·지도를 지우면 FK cascade 로 댓글과 읽음 표시도 함께 지워진다.
