@@ -4,6 +4,7 @@ import { LIMITS } from '../api/types';
 import type { PinStatus, RevisitIntent } from '../api/types';
 import { validatePinForm } from '../utils/pinForm';
 import type { PinFormValues } from '../utils/pinForm';
+import PhotoPicker from './PhotoPicker';
 import StarRating from './StarRating';
 import TagInput from './TagInput';
 
@@ -13,6 +14,10 @@ interface Props {
   /** 저장을 시도한다. 실패하면 예외를 던지고, 이 폼이 그 메시지를 보여 준다. */
   onSubmit: (values: PinFormValues) => Promise<void>;
   onCancel: () => void;
+  /** 새 핀에서만 넘긴다: 고른 사진과 바꾸는 함수. 없으면 사진 고르기를 보이지 않는다(수정 화면은 상세에서 사진을 다룬다). */
+  photos?: { files: File[]; onChange: (files: File[]) => void };
+  /** 저장하는 동안 버튼에 보일 문구(사진 올리는 진행 상황 등). 없으면 "저장 중…" */
+  busyLabel?: string | null;
 }
 
 const STATUS_OPTIONS: ReadonlyArray<{ value: PinStatus; label: string }> = [
@@ -26,7 +31,7 @@ const REVISIT_OPTIONS: ReadonlyArray<{ value: RevisitIntent | null; label: strin
   { value: 'ONCE', label: '한 번이면 충분' },
 ];
 
-export default function PinForm({ initial, submitLabel, onSubmit, onCancel }: Props) {
+export default function PinForm({ initial, submitLabel, onSubmit, onCancel, photos, busyLabel }: Props) {
   const nameId = useId();
   const memoId = useId();
   const [values, setValues] = useState<PinFormValues>(initial);
@@ -113,6 +118,8 @@ export default function PinForm({ initial, submitLabel, onSubmit, onCancel }: Pr
         <StarRating value={values.rating} onChange={(rating) => update('rating', rating)} />
       </div>
 
+      {photos && <PhotoPicker files={photos.files} onChange={photos.onChange} disabled={saving} />}
+
       <div>
         <label htmlFor={memoId} className="mb-1.5 block text-sm font-medium text-slate-300">메모 (공유돼요)</label>
         <textarea
@@ -136,7 +143,7 @@ export default function PinForm({ initial, submitLabel, onSubmit, onCancel }: Pr
           취소
         </button>
         <button type="submit" disabled={saving} className="flex-[2] rounded-lg bg-teal-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-60">
-          {saving ? '저장 중…' : submitLabel}
+          {saving ? busyLabel ?? '저장 중…' : submitLabel}
         </button>
       </div>
     </form>

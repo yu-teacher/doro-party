@@ -4,7 +4,7 @@ import * as recordsApi from '../api/recordsApi';
 import { LIMITS } from '../api/types';
 import type { Photo, Visit } from '../api/types';
 import { useMapStore } from '../store/mapStore';
-import { prepareImage } from '../utils/image';
+import { uploadPhotoFiles } from '../utils/photoUpload';
 import { sortVisits } from '../utils/visits';
 
 export interface PinRecords {
@@ -77,20 +77,10 @@ export function usePinRecords(mapId: string, pinId: string): PinRecords {
 
   const uploadPhotos = useCallback(
     async (files: File[]) => {
-      const failures: string[] = [];
-      const room = Math.max(0, LIMITS.photosPerPin - photos.length);
-      if (files.length > room) {
-        failures.push(`사진은 핀마다 ${LIMITS.photosPerPin}장까지 붙일 수 있어요. ${room}장만 올려요.`);
-      }
-      for (const file of files.slice(0, room)) {
-        try {
-          const uploaded = await recordsApi.uploadPhoto(mapId, pinId, await prepareImage(file));
-          setPhotos((previous) => [...previous, uploaded]);
-        } catch (failure) {
-          console.warn('Photo upload failed', failure);
-          failures.push(`${file.name}: ${failure instanceof Error ? failure.message : '올리지 못했어요.'}`);
-        }
-      }
+      const failures = await uploadPhotoFiles(mapId, pinId, files, {
+        room: LIMITS.photosPerPin - photos.length,
+        onUploaded: (uploaded) => setPhotos((previous) => [...previous, uploaded]),
+      });
       await reloadPins();
       return failures;
     },
