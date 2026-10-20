@@ -77,7 +77,7 @@ class PushDispatchTest extends PartyHttpTestBase {
         awaitCount(ownerPhone, 1);
         assertThat(ownerPhone.lastField("title")).isEqualTo("골목 국밥집");
         assertThat(ownerPhone.lastField("body")).endsWith(": 여기 웨이팅 길어요");
-        assertThat(ownerPhone.lastField("url")).isEqualTo("./?map=" + mapId + "&pin=" + pinId);
+        assertThat(ownerPhone.lastField("url")).startsWith("./?map=" + mapId + "&pin=" + pinId + "&comment=");   // 눌렀을 때 그 댓글로 간다
         assertThat(ownerPhone.lastField("tag")).isEqualTo("comment:" + pinId);
         assertThat(ownerPhone.received().get(0).headers().get("topic")).hasSize(32);
         assertThat(ownerPhone.received().get(0).headers().get("urgency")).isEqualTo("high");

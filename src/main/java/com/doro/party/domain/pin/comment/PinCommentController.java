@@ -3,6 +3,7 @@ package com.doro.party.domain.pin.comment;
 import com.doro.party.common.response.ApiResponse;
 import com.doro.party.domain.pin.comment.PinCommentDtos.CommentRequest;
 import com.doro.party.domain.pin.comment.PinCommentDtos.CommentResponse;
+import com.doro.party.domain.pin.comment.PinCommentDtos.CreateCommentRequest;
 import com.doro.party.domain.pin.comment.PinCommentDtos.ReadRequest;
 import com.doro.party.infra.guard.PartyGuard;
 import com.hunnit_beasts.doro.sdk.annotation.CurrentDoroUser;
@@ -39,14 +40,14 @@ public class PinCommentController {
         return ApiResponse.success(commentService.list(mapId, pinId));
     }
 
-    @Operation(summary = "댓글 남기기 (Guard: viewer 이상)")
+    @Operation(summary = "댓글·답글 남기기 (Guard: viewer 이상)", description = "parentId 가 있으면 그 댓글에 대한 답글(한 단계). 지워진 댓글에는 달 수 없다")
     @DoroGuard(namespace = PartyGuard.MAP, object = "#mapId", relation = PartyGuard.VIEWER)
     @PostMapping
     public ApiResponse<CommentResponse> add(
             @PathVariable("mapId") UUID mapId,
             @PathVariable("pinId") UUID pinId,
             @CurrentDoroUser DoroUser doroUser,
-            @Valid @RequestBody CommentRequest request
+            @Valid @RequestBody CreateCommentRequest request
     ) {
         return ApiResponse.success(commentService.add(mapId, pinId, doroUser, request));
     }

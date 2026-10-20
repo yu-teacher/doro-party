@@ -40,16 +40,45 @@ public class PinComment {
     @Column(name = "edited_at")
     private Instant editedAt;
 
+    /** 답글이 속한 맨 위 댓글. 맨 위 댓글이면 null (답글은 한 단계만 있다). */
+    @Column(name = "parent_id", updatable = false)
+    private UUID parentId;
+
+    /** 이 답글이 향한 사람(답한 댓글의 작성자). 맨 위 댓글이면 null. */
+    @Column(name = "reply_to_user_id", updatable = false)
+    private UUID replyToUserId;
+
+    /** 답글이 달린 댓글을 지우면 내용만 비우고 이 시각을 남긴다(답글은 그대로 보인다). */
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
     @Builder
-    private PinComment(UUID pinId, UUID userId, String body, Instant createdAt) {
+    private PinComment(UUID pinId, UUID userId, String body, Instant createdAt, UUID parentId, UUID replyToUserId) {
         this.pinId = pinId;
         this.userId = userId;
         this.body = body;
         this.createdAt = createdAt;
+        this.parentId = parentId;
+        this.replyToUserId = replyToUserId;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    public boolean isReply() {
+        return parentId != null;
     }
 
     public void edit(String body, Instant now) {
         this.body = body;
         this.editedAt = now;
     }
+
+    /** 내용을 비우고 삭제 표시만 남긴다. */
+    public void markDeleted(Instant now) {
+        this.body = "";
+        this.deletedAt = now;
+    }
+
 }
