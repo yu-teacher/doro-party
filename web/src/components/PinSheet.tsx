@@ -1,11 +1,13 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { LIMITS } from '../api/types';
 import type { Pin, RevisitIntent } from '../api/types';
 import { usePinComments } from '../hooks/usePinComments';
 import { usePinRecords } from '../hooks/usePinRecords';
 import { useAuthStore } from '../store/authStore';
 import { useMapStore } from '../store/mapStore';
 import { canPlacePins } from '../utils/mapRole';
+import { uploadPhotoFiles } from '../utils/photoUpload';
 import { EMPTY_PIN_FORM, formValuesFromPin, toPinInput } from '../utils/pinForm';
 import type { PinFormValues } from '../utils/pinForm';
 import CommentThread from './CommentThread';
@@ -49,12 +51,57 @@ export default function PinSheet(props: CreateProps | ViewProps) {
 
 function CreatePin({ lat, lng, onCreated, onClose }: CreateProps) {
   const addPin = useMapStore((state) => state.addPin);
+  const [files, setFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<string | null>(null);
+  /** 핀은 저장됐는데 일부 사진을 올리지 못했을 때의 결과(사용자가 확인하고 핀을 연다) */
+  const [outcome, setOutcome] = useState<{ pin: Pin; failures: string[] } | null>(null);
+
   const save = async (values: PinFormValues) => {
-    onCreated(await addPin(toPinInput(values, lat, lng)));
+    const pin = await addPin(toPinInput(values, lat, lng));
+    if (files.length === 0) {
+      onCreated(pin);
+      return;
+    }
+    // 여기부터는 핀이 이미 저장된 뒤다: 사진 때문에 예외를 던지면 폼이 다시 저장되어 같은 핀이 또 만들어지므로, 아래는 던지지 않게 한다
+    setProgress(`사진 올리는 중 (1/${Math.min(files.length, LIMITS.photosPerPin)})`);
+    const failures = await uploadPhotoFiles(pin.mapId, pin.id, files, {
+      room: LIMITS.photosPerPin,
+      onProgress: (done, total) => setProgress(`사진 올리는 중 (${Math.min(done + 1, total)}/${total})`),
+    });
+    setProgress(null);
+    try {
+      await useMapStore.getState().reloadPins();   // 핀 목록의 사진 수를 맞춘다
+    } catch (failure) {
+      console.warn('Failed to reload pins after photo upload', failure);
+    }
+    if (failures.length === 0) {
+      onCreated(pin);
+    } else {
+      setOutcome({ pin, failures });
+    }
   };
+
+  if (outcome) {
+    return (
+      <Sheet title="핀을 꽂았어요" onClose={() => onCreated(outcome.pin)}>
+        <div className="flex flex-col gap-3">
+          <p role="status" className="rounded-lg bg-amber-400/15 px-3 py-2.5 text-sm leading-relaxed text-amber-100">
+            핀은 저장했어요. 사진 {outcome.failures.length}건을 올리지 못했어요. 핀 상세에서 다시 올릴 수 있어요.
+          </p>
+          <ul className="flex flex-col gap-1 text-xs text-slate-400">
+            {outcome.failures.map((reason) => <li key={reason} className="break-words">· {reason}</li>)}
+          </ul>
+          <button type="button" onClick={() => onCreated(outcome.pin)} className="rounded-lg bg-teal-500 py-2.5 text-sm font-semibold text-slate-950 hover:bg-teal-400">
+            핀 보기
+          </button>
+        </div>
+      </Sheet>
+    );
+  }
+
   return (
     <Sheet title="새 핀" onClose={onClose}>
-      <PinForm initial={EMPTY_PIN_FORM} submitLabel="핀 꽂기" onSubmit={save} onCancel={onClose} />
+      <PinForm initial={EMPTY_PIN_FORM} submitLabel="핀 꽂기" onSubmit={save} onCancel={onClose} photos={{ files, onChange: setFiles }} busyLabel={progress} />
     </Sheet>
   );
 }
