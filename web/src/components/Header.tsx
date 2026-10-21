@@ -1,8 +1,9 @@
 import { Bell, BellRing, House, LogIn, LogOut } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { detachThisDevice } from '../push/pushClient';
 import { buildLoginUrl, useAuthStore } from '../store/authStore';
 import { usePushStore } from '../store/pushStore';
+import ServiceLauncher from './ServiceLauncher';
 
 export default function Header() {
   const { user, isAuthenticated, signOut } = useAuthStore();
@@ -31,8 +32,14 @@ export default function Header() {
         >
           <House size={18} />
         </a>
-        <h1 className="text-lg font-bold tracking-tight text-slate-100">도로 파티</h1>
+        <h1 className="text-lg font-bold tracking-tight text-slate-100">
+          <Link to="/" className="inline-block py-1">
+            도로 파티
+          </Link>
+        </h1>
       </div>
+      <div className="relative flex items-center gap-2">
+      <ServiceLauncher currentId="party" />
       {isAuthenticated && user ? (
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-2 text-sm text-slate-300">
@@ -65,6 +72,7 @@ export default function Header() {
           로그인
         </a>
       )}
+      </div>
     </header>
   );
 }
