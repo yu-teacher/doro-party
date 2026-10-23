@@ -32,6 +32,7 @@ public class PushDispatcher {
     private final PushPreferencesRepository preferences;
     private final PinCommentRepository comments;
     private final DoroGuardClient guard;
+    private final NotifyShadow shadow;
 
     @Async("pushExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -60,7 +61,7 @@ public class PushDispatcher {
                 "comment:" + event.pinId());
         for (UUID recipient : recipients) {
             // 지금도 이 지도를 볼 수 있는 사람에게만 보낸다(공유가 풀린 사람에게 핀 이름과 댓글이 새지 않게)
-            deliver(recipient, message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
+            deliver(recipient, "comment", message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
         }
     }
 
@@ -78,11 +79,11 @@ public class PushDispatcher {
         String tag = "reply:" + event.rootCommentId();
         if (direct != null && !direct.equals(event.authorId())) {
             PushMessage message = new PushMessage(event.pinName(), event.authorNickname() + "님이 내 댓글에 답글: " + event.body(), url, tag);
-            deliver(direct, message, prefs -> prefs.comments(), canView(event.mapId(), direct));
+            deliver(direct, "comment", message, prefs -> prefs.comments(), canView(event.mapId(), direct));
         }
         PushMessage message = new PushMessage(event.pinName(), event.authorNickname() + "(답글): " + event.body(), url, tag);
         for (UUID recipient : others) {
-            deliver(recipient, message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
+            deliver(recipient, "comment", message, prefs -> prefs.comments(), canView(event.mapId(), recipient));
         }
     }
 
@@ -94,7 +95,7 @@ public class PushDispatcher {
     @Async("pushExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onFriendRequested(FriendRequested event) {
-        run("friend-request", () -> deliver(event.toUserId(),
+        run("friend-request", () -> deliver(event.toUserId(), "friend",
                 new PushMessage("친구 요청", event.fromNickname() + "님이 친구 요청을 보냈어요", "./friends", "friend-request:" + event.toUserId()),
                 prefs -> prefs.friendRequests(), true));
     }
@@ -102,7 +103,7 @@ public class PushDispatcher {
     @Async("pushExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onFriendAccepted(FriendAccepted event) {
-        run("friend-accepted", () -> deliver(event.toUserId(),
+        run("friend-accepted", () -> deliver(event.toUserId(), "friend",
                 new PushMessage("친구가 됐어요", event.byNickname() + "님이 친구 요청을 수락했어요", "./friends", "friend-accepted:" + event.toUserId()),
                 prefs -> prefs.friendRequests(), true));
     }
@@ -113,18 +114,21 @@ public class PushDispatcher {
         if (!sender.enabled()) {
             return;
         }
-        run("share", () -> deliver(event.toUserId(),
+        run("share", () -> deliver(event.toUserId(), "share",
                 new PushMessage("지도가 공유됐어요", event.ownerNickname() + "님이 「" + event.mapName() + "」 지도를 공유했어요", "./?map=" + event.mapId(), "share:" + event.mapId()),
                 prefs -> prefs.shares(), canView(event.mapId(), event.toUserId())));
     }
 
-    private void deliver(UUID userId, PushMessage message, Predicate<PushDtos.PreferencesDto> wanted, boolean allowed) {
+    private void deliver(UUID userId, String type, PushMessage message, Predicate<PushDtos.PreferencesDto> wanted, boolean allowed) {
         if (!allowed) {
             return;
         }
         PushDtos.PreferencesDto prefs = preferences.findById(userId).map(PushDtos.PreferencesDto::from).orElseGet(PushDtos.PreferencesDto::defaults);
-        if (wanted.test(prefs)) {
-            sender.sendToUser(userId, message, true);
+        boolean want = wanted.test(prefs);
+        PushSender.Summary summary = want ? sender.sendToUser(userId, message, true) : new PushSender.Summary(0, 0);
+        // 이관 검증(SHADOW): 같은 알림을 알림 서비스에 dryRun 으로 물어 결과만 비교한다(실제 발송은 위에서 이미 끝났다). LEGACY 에서는 아무것도 하지 않는다.
+        if (sender.enabled()) {
+            shadow.compare(type, userId, message, want, summary);
         }
     }
 

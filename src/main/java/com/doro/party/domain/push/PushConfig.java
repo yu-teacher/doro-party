@@ -14,7 +14,7 @@ import java.util.concurrent.Executor;
 @Slf4j
 @Configuration
 @EnableAsync
-@EnableConfigurationProperties(PushProperties.class)
+@EnableConfigurationProperties({PushProperties.class, NotifyProperties.class})
 public class PushConfig {
 
     @Bean
