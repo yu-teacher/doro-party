@@ -37,6 +37,9 @@ services:
       PARTY_VAPID_PUBLIC_KEY: ${PARTY_VAPID_PUBLIC_KEY:-}
       PARTY_VAPID_PRIVATE_KEY: ${PARTY_VAPID_PRIVATE_KEY:-}
       PARTY_VAPID_SUBJECT: ${PARTY_VAPID_SUBJECT:-}
+      # 플랫폼 알림 서비스(doro-notify) 이관 검증. 기본(LEGACY)은 지금처럼 파티가 직접 보내고 알림 서비스를 부르지 않는다. SHADOW 는 같은 알림을 dryRun 으로 물어 비교만 한다.
+      PARTY_NOTIFY_MODE: ${PARTY_NOTIFY_MODE:-LEGACY}
+      PARTY_NOTIFY_TOKEN: ${PARTY_NOTIFY_TOKEN:-}
     networks:
       - doro-network
 

@@ -135,6 +135,14 @@ party:
     worker-threads: ${PARTY_PUSH_WORKER_THREADS:2}
     queue-capacity: ${PARTY_PUSH_QUEUE_CAPACITY:200}
 
+  # 플랫폼 알림 서비스(doro-notify) 이관. LEGACY(기본)=파티가 직접 보내고 알림 서비스는 부르지 않는다.
+  # SHADOW=파티가 직접 보내면서 같은 알림을 알림 서비스에 dryRun 으로 물어 결과만 비교한다(알림이 두 번 가지 않는다). 토큰이 없으면 LEGACY 와 같다.
+  notify:
+    mode: ${PARTY_NOTIFY_MODE:LEGACY}
+    base-url: ${PARTY_NOTIFY_URL:http://notify-api:8089}
+    service-token: ${PARTY_NOTIFY_TOKEN:}
+    base-path: ${PARTY_WEB_BASE_PATH:/party}
+
   # "오늘" 을 정하는 서비스 시간대(방문 날짜가 미래인지 판단)
   timezone: ${PARTY_TIMEZONE:Asia/Seoul}
 
