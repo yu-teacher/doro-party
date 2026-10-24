@@ -51,6 +51,19 @@ public class NotifyShadow {
         executor.initialize();
     }
 
+    /** 지금까지 일치한 비교 수(시험·상태 확인용). */
+    long matchedCount() {
+        return matched.get();
+    }
+
+    long mismatchedCount() {
+        return mismatched.get();
+    }
+
+    long failedCount() {
+        return failed.get();
+    }
+
     public boolean active() {
         return properties.shadowing();
     }
