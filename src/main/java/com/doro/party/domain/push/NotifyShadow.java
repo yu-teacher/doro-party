@@ -156,12 +156,8 @@ public class NotifyShadow {
         }
     }
 
-    /** 파티 알림의 주소는 앱 범위 기준 상대 주소({@code ./?map=…})다. 알림 서비스는 앱 범위로 시작하는 절대 경로만 받는다. */
     String toNotifyUrl(String url) {
-        if (url.startsWith("./")) {
-            return properties.basePath() + url.substring(2);
-        }
-        return url;
+        return properties.toNotifyUrl(url);
     }
 
     private HttpRequest request(String method, String path, Object body) throws Exception {

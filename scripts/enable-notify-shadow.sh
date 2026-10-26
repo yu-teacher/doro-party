@@ -4,7 +4,8 @@
 #   ssh mini 'bash -s -- --check'             < scripts/enable-notify-shadow.sh   # 읽기 전용: 현재 상태(기본)
 #   ssh mini 'bash -s -- --apply'             < scripts/enable-notify-shadow.sh   # 설정 파일만 고친다(컨테이너는 그대로)
 #   ssh mini 'bash -s -- --apply --restart'   < scripts/enable-notify-shadow.sh   # 위 + 파티 api 컨테이너를 다시 만든다(몇 초)
-#   ssh mini 'bash -s -- --off --restart'     < scripts/enable-notify-shadow.sh   # SHADOW 를 끈다(LEGACY: 파티가 직접 보내고 알림 서비스를 부르지 않는다)
+#   ssh mini 'bash -s -- --central --restart' < scripts/enable-notify-shadow.sh   # CENTRAL: 파티는 알림 서비스에 요청만 하고 푸시 설정 API 도 알림 서비스로 넘긴다
+#   ssh mini 'bash -s -- --off --restart'     < scripts/enable-notify-shadow.sh   # 끈다(LEGACY: 파티가 직접 보내고 알림 서비스를 부르지 않는다)
 #
 # 하는 일
 #   1) ~/doro-notify/.env 의 NOTIFY_INTERNAL_TOKENS 에서 'party:' 토큰을 읽어(출력 안 함) ~/doro-party/.env 의 PARTY_NOTIFY_TOKEN 에 넣고 PARTY_NOTIFY_MODE=SHADOW 로 한다(백업 후).
@@ -16,14 +17,15 @@ set -Eeuo pipefail
 
 PARTY_DIR="${PARTY_DIR:-$HOME/doro-party}"
 NOTIFY_DIR="${NOTIFY_DIR:-$HOME/doro-notify}"
-APPLY=false; OFF=false; RESTART=false
+APPLY=false; OFF=false; RESTART=false; MODE=SHADOW
 for a in "$@"; do
   case "$a" in
     --check) ;;
     --apply) APPLY=true ;;
     --off) OFF=true; APPLY=true ;;
+    --central) APPLY=true; MODE=CENTRAL ;;
     --restart) RESTART=true ;;
-    *) echo "사용법: bash -s -- [--check | --apply | --off] [--restart]" >&2; exit 2 ;;
+    *) echo "사용법: bash -s -- [--check | --apply | --central | --off] [--restart]" >&2; exit 2 ;;
   esac
 done
 log() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*"; }
@@ -62,9 +64,9 @@ else
   [ "${#NTOK}" -ge 32 ] || die "party 호출자 토큰이 32자 미만이다"
   cp -p "$ENV_FILE" "$ENV_FILE.bak-notify-$TS"; log ".env 백업: $ENV_FILE.bak-notify-$TS"
   set_var "$ENV_FILE" PARTY_NOTIFY_TOKEN "$NTOK"
-  set_var "$ENV_FILE" PARTY_NOTIFY_MODE SHADOW
+  set_var "$ENV_FILE" PARTY_NOTIFY_MODE "$MODE"
   unset NTOK
-  log "파티 .env 에 PARTY_NOTIFY_TOKEN(값 비출력)과 PARTY_NOTIFY_MODE=SHADOW 를 넣었다"
+  log "파티 .env 에 PARTY_NOTIFY_TOKEN(값 비출력)과 PARTY_NOTIFY_MODE=$MODE 를 넣었다"
 fi
 if passes; then log "compose 가 이미 두 변수를 전달한다"
 else

@@ -28,16 +28,23 @@ import java.util.function.Predicate;
 @RequiredArgsConstructor
 public class PushDispatcher {
 
+    /** 알림 서비스가 오래 안 닿아도 이 시간 안에는 계속 다시 보낸다. 지나면 버린다(낡은 알림이 늦게 가지 않게). */
+    static final java.time.Duration RETRY_WINDOW = java.time.Duration.ofHours(1);
+
     private final PushSender sender;
     private final PushPreferencesRepository preferences;
     private final PinCommentRepository comments;
     private final DoroGuardClient guard;
     private final NotifyShadow shadow;
+    private final NotifyProperties notify;
+    private final NotifyOutbox outbox;
+    private final PushProperties pushProperties;
+    private final java.time.Clock clock;
 
     @Async("pushExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onCommentPosted(CommentPosted event) {
-        if (!sender.enabled()) {
+        if (!available()) {
             return;
         }
         run("comment", () -> {
@@ -111,7 +118,7 @@ public class PushDispatcher {
     @Async("pushExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMapShared(MapShared event) {
-        if (!sender.enabled()) {
+        if (!available()) {
             return;
         }
         run("share", () -> deliver(event.toUserId(), "share",
@@ -123,6 +130,12 @@ public class PushDispatcher {
         if (!allowed) {
             return;
         }
+        if (notify.central()) {
+            // CENTRAL: 받을지(설정)·어느 기기에 보낼지는 알림 서비스가 판정한다. 파티는 받는 사람과 문구만 정해 아웃박스에 쌓는다(보내기는 재시도기가 한다).
+            java.time.Instant now = clock.instant();
+            outbox.enqueue(userId, type, message, now, now.plus(RETRY_WINDOW));
+            return;
+        }
         PushDtos.PreferencesDto prefs = preferences.findById(userId).map(PushDtos.PreferencesDto::from).orElseGet(PushDtos.PreferencesDto::defaults);
         boolean want = wanted.test(prefs);
         PushSender.Summary summary = want ? sender.sendToUser(userId, message, true) : new PushSender.Summary(0, 0);
@@ -130,6 +143,11 @@ public class PushDispatcher {
         if (sender.enabled()) {
             shadow.compare(type, userId, message, want, summary);
         }
+    }
+
+    /** 알림을 처리할 수 있는 상태인가: CENTRAL 은 알림 서비스가 보내므로 파티의 VAPID 키가 없어도 된다. */
+    private boolean available() {
+        return notify.central() || sender.enabled();
     }
 
     /** Guard 가 응답하지 못하면 보내지 않는다(권한을 확인하지 못한 채 내용을 보내지 않는다). */
