@@ -31,6 +31,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class PushController {
 
     private final PushSubscriptionService service;
+    private final PushCentral central;
+    private final NotifyProperties notify;
 
     private static DoroUser authenticated(DoroUser user) {
         if (user == null || !user.isAuthenticated()) {
@@ -43,38 +45,46 @@ public class PushController {
     @GetMapping("/config")
     public ApiResponse<PushConfigResponse> config(@CurrentDoroUser DoroUser user) {
         authenticated(user);
-        return ApiResponse.success(service.config());
+        return ApiResponse.success(notify.central() ? central.config() : service.config());
     }
 
     @Operation(summary = "이 기기를 알림 기기로 등록 (로그인)", description = "브라우저의 PushSubscription.toJSON() 을 그대로 보낸다. 허용된 푸시 서비스 주소만 받는다")
     @PutMapping("/subscription")
     public ApiResponse<Void> subscribe(@CurrentDoroUser DoroUser user, @Valid @RequestBody SubscribeRequest body, HttpServletRequest request) {
-        service.subscribe(authenticated(user), body.endpoint(), body.keys().p256dh(), body.keys().auth(), request.getHeader(HttpHeaders.USER_AGENT));
+        if (notify.central()) {
+            central.subscribe(authenticated(user), body.endpoint(), body.keys().p256dh(), body.keys().auth(), request.getHeader(HttpHeaders.USER_AGENT));
+        } else {
+            service.subscribe(authenticated(user), body.endpoint(), body.keys().p256dh(), body.keys().auth(), request.getHeader(HttpHeaders.USER_AGENT));
+        }
         return ApiResponse.success();
     }
 
     @Operation(summary = "이 기기의 알림 해제 (로그인)", description = "없어도 성공. 내 구독만 지울 수 있다")
     @DeleteMapping("/subscription")
     public ApiResponse<Void> unsubscribe(@CurrentDoroUser DoroUser user, @Valid @RequestBody UnsubscribeRequest body) {
-        service.unsubscribe(authenticated(user), body.endpoint());
+        if (notify.central()) {
+            central.unsubscribe(authenticated(user), body.endpoint());
+        } else {
+            service.unsubscribe(authenticated(user), body.endpoint());
+        }
         return ApiResponse.success();
     }
 
     @Operation(summary = "알림 종류 설정 보기 (로그인)")
     @GetMapping("/preferences")
     public ApiResponse<PreferencesDto> preferences(@CurrentDoroUser DoroUser user) {
-        return ApiResponse.success(service.preferences(authenticated(user)));
+        return ApiResponse.success(notify.central() ? central.preferences(authenticated(user)) : service.preferences(authenticated(user)));
     }
 
     @Operation(summary = "알림 종류 설정 바꾸기 (로그인)")
     @PutMapping("/preferences")
     public ApiResponse<PreferencesDto> updatePreferences(@CurrentDoroUser DoroUser user, @RequestBody PreferencesDto body) {
-        return ApiResponse.success(service.updatePreferences(authenticated(user), body));
+        return ApiResponse.success(notify.central() ? central.updatePreferences(authenticated(user), body) : service.updatePreferences(authenticated(user), body));
     }
 
     @Operation(summary = "시험 알림 보내기 (로그인)", description = "내 모든 기기로 알림을 보내고 결과(기기 수, 전달 수)를 돌려준다")
     @PostMapping("/test")
     public ApiResponse<TestResult> test(@CurrentDoroUser DoroUser user) {
-        return ApiResponse.success(service.sendTest(authenticated(user)));
+        return ApiResponse.success(notify.central() ? central.sendTest(authenticated(user)) : service.sendTest(authenticated(user)));
     }
 }
