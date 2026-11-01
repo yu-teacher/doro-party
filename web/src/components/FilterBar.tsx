@@ -7,6 +7,10 @@ interface Props {
   tags: string[];
   onStatusChange: (filter: StatusFilter) => void;
   onTagChange: (tag: string | null) => void;
+  /** 필터를 적용한 뒤 지도에 보이는 핀 수와 전체 핀 수 */
+  shownCount: number;
+  totalCount: number;
+  onReset: () => void;
 }
 
 const STATUS_CHIPS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
@@ -24,9 +28,16 @@ const ACTIVE: Record<StatusFilter, string> = {
 const CHIP = 'shrink-0 rounded-full px-3 py-1 text-xs font-semibold shadow ring-1 ring-slate-700';
 
 /** 상태와 태그로 핀을 걸러 보는 칩 줄. 가로로 스크롤된다. */
-export default function FilterBar({ statusFilter, tagFilter, tags, onStatusChange, onTagChange }: Props) {
+export default function FilterBar({ statusFilter, tagFilter, tags, onStatusChange, onTagChange, shownCount, totalCount, onReset }: Props) {
+  const filtered = statusFilter !== 'ALL' || tagFilter !== null;
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-1" role="toolbar" aria-label="핀 필터">
+      {/* 상태와 태그 필터는 함께 적용된다. 어떤 필터가 걸려 있든 한 번에 풀 수 있고, 몇 개가 보이는지 알려 준다. */}
+      {filtered && (
+        <button type="button" onClick={onReset} className={`${CHIP} bg-rose-300 text-slate-900`}>
+          필터 해제 · {shownCount}/{totalCount}개
+        </button>
+      )}
       {STATUS_CHIPS.map((chip) => (
         <button
           key={chip.value}
