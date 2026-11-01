@@ -116,12 +116,19 @@ export default function MapPage() {
   }, [wantsRecommendations, overlay.active, navigate, location.pathname]);
 
   const overlayActive = overlay.active;
-  const visiblePins = useMemo(() => filterPins(pins, statusFilter, tagFilter), [pins, statusFilter, tagFilter]);
+  const tags = useMemo(() => collectTags(pins), [pins]);
+  // 고른 태그가 더는 어느 핀에도 없으면(마지막 핀을 고치거나 지웠을 때) 필터가 걸린 채 지도만 비지 않게 없는 것으로 본다
+  const activeTag = tagFilter !== null && tags.includes(tagFilter) ? tagFilter : null;
+  const visiblePins = useMemo(() => filterPins(pins, statusFilter, activeTag), [pins, statusFilter, activeTag]);
+  useEffect(() => {
+    if (tagFilter !== null && !pinsLoading && activeTag === null) {
+      setTagFilter(null);
+    }
+  }, [tagFilter, activeTag, pinsLoading, setTagFilter]);
   const overlayVisiblePins = useMemo(() => withoutHiddenAuthors(overlay.pins, overlay.hiddenAuthors), [overlay.pins, overlay.hiddenAuthors]);
   const overlayAuthors = useMemo(() => authorsOf(overlay.pins), [overlay.pins]);
   const heat = useMemo(() => (overlayActive && overlay.heatmap ? toHeatSpots(overlay.recommendations) : null), [overlayActive, overlay.heatmap, overlay.recommendations]);
   const mapNames = useMemo(() => new Map(maps.map((map) => [map.id, map.name])), [maps]);
-  const tags = useMemo(() => collectTags(pins), [pins]);
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null;
   const canPlace = !overlayActive && canPlacePins(selectedMap?.role);
   const pinSource = overlayActive ? overlay.pins : pins;
@@ -260,7 +267,8 @@ export default function MapPage() {
   };
 
   const mapPins = !isAuthenticated ? [] : overlayActive ? overlayVisiblePins : visiblePins;
-  const fitKey = !isAuthenticated ? null : overlayActive ? (overlay.loading ? null : `overlay:${overlay.loadCount}`) : pinsLoading ? null : selectedMapId;
+  // 필터를 바꾸면 지도도 보이는 핀에 맞춘다(그러지 않으면 맞는 핀이 화면 밖에 있어 지도가 빈 것처럼 보인다)
+  const fitKey = !isAuthenticated ? null : overlayActive ? (overlay.loading ? null : `overlay:${overlay.loadCount}`) : pinsLoading ? null : `${selectedMapId}|${statusFilter}|${activeTag ?? ''}`;
 
   return (
     <div className="relative h-full overflow-hidden">
@@ -307,7 +315,19 @@ export default function MapPage() {
                 onOverlay={openOverlay}
               />
               {pins.length > 0 && (
-                <FilterBar statusFilter={statusFilter} tagFilter={tagFilter} tags={tags} onStatusChange={setStatusFilter} onTagChange={setTagFilter} />
+                <FilterBar
+                  statusFilter={statusFilter}
+                  tagFilter={activeTag}
+                  tags={tags}
+                  onStatusChange={setStatusFilter}
+                  onTagChange={setTagFilter}
+                  shownCount={visiblePins.length}
+                  totalCount={pins.length}
+                  onReset={() => {
+                    setStatusFilter('ALL');
+                    setTagFilter(null);
+                  }}
+                />
               )}
             </>
           )}
@@ -326,6 +346,22 @@ export default function MapPage() {
           <p className="mb-3">「홍대 맛집」, 「일본 여행」처럼 주제별로 지도를 만들고 핀을 꽂아요.</p>
           <button type="button" onClick={() => setSheet({ kind: 'new-map' })} className="rounded-lg bg-teal-500 px-4 py-2 font-semibold text-slate-950 hover:bg-teal-400">
             지도 만들기
+          </button>
+        </MapNotice>
+      )}
+
+      {isAuthenticated && !overlayActive && !pinsLoading && pins.length > 0 && visiblePins.length === 0 && sheet.kind === 'none' && (
+        <MapNotice title="조건에 맞는 핀이 없어요">
+          <p className="mb-3">상태와 태그 필터가 함께 적용되고 있어요.</p>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter('ALL');
+              setTagFilter(null);
+            }}
+            className="rounded-lg bg-teal-500 px-4 py-2 font-semibold text-slate-950 hover:bg-teal-400"
+          >
+            필터 해제
           </button>
         </MapNotice>
       )}

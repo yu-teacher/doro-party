@@ -29,6 +29,8 @@ export default defineConfig({
   webServer: {
     command: `npx vite --port ${PORT} --strictPort --host 127.0.0.1`,
     url: `http://localhost:${PORT}/party/`,
+    // 지도 SDK 는 시험이 가짜로 대신한다(e2e/fakeKakao.ts). 키가 있어야 앱이 SDK 를 불러오려 한다.
+    env: { VITE_KAKAO_MAP_APP_KEY: 'e2e-fake-key' },
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

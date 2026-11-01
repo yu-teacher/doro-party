@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { mockKakao } from './fakeKakao';
 
 const API = '/party/api/v1';
 const LONG = 'x'.repeat(48);
@@ -44,6 +45,7 @@ export interface MockOptions {
 
 /** 파티 서버(BFF 세션 포함) 응답을 가짜로 대체한다. 모르는 요청은 404 로 두어 예상치 못한 호출을 드러낸다. */
 export async function mockApi(page: Page, { loggedIn }: MockOptions): Promise<void> {
+  await mockKakao(page);
   await page.route((url) => url.pathname.startsWith(API), async (route) => {
     const request = route.request();
     if (!['xhr', 'fetch'].includes(request.resourceType())) return route.fallback();
