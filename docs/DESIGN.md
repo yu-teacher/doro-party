@@ -28,7 +28,7 @@
 | 관계 | 친구(초대 링크로 바로, 사용자명 요청은 상대 승인) + 모임(카톡방처럼 링크·친구 초대로 들어오는 영구 그룹, 방장/멤버) |
 | 겹쳐보기 | 레이어 토글(기본) + 모임 전용 뷰, 작성자 항상 표시, 가까운 핀은 거리 기준 클러스터링 |
 | 추천 | 규칙 기반 점수 + 히트맵 |
-| 인증/인가 | Doro OAuth(BFF 세션 쿠키), 지도 권한은 Guard ReBAC |
+| 인증/인가 | Doro OAuth(BFF 세션 쿠키 → 게이트웨이가 Bearer 로 바꿔 전달), 지도 권한은 Guard ReBAC |
 | 사진 | MinIO 비공개 버킷에 저장하고, 권한(Guard)을 확인한 백엔드가 올리고 내려준다 |
 
 ## 2. 아키텍처
@@ -40,7 +40,7 @@ flowchart LR
     GW -->|"/party/api/"| API["party-api (Spring Boot)"]
     B -.->|"지도 타일·SDK"| K["카카오맵"]
     B -.->|"presigned PUT"| M[("MinIO")]
-    API -->|"OAuth 코드 교환·토큰 검증"| IAM["Doro IAM"]
+    API -->|"토큰 검증(JWKS)"| IAM["Doro IAM"]
     API -->|"@DoroGuard / 튜플 (gRPC)"| G["Doro Guard"]
     API --- PG[("PostgreSQL<br/>service_party")]
     API -->|"presign 발급"| M
@@ -49,8 +49,8 @@ flowchart LR
 ### doro-blog 와 맞춘 규약
 - 백엔드: Java 25, Spring Boot 4, JPA, Flyway(`party_schema_history`), `ddl-auto: validate`.
 - 프런트: React 19, Vite, TypeScript, zustand, ESLint로 AGENTS.md 규칙 강제.
-- `includeBuild('../Doro')` 로 Doro SDK 사용. 응답 봉투·`GlobalExceptionHandler`·`GuardTuples` 패턴(DB 트랜잭션 안에서 튜플 쓰기, 실패 시 보상)을 따른다.
-- 로그인은 BFF: 브라우저에는 HttpOnly 세션 쿠키만, 토큰은 서버에 암호화 보관, 상태 변경 요청은 CSRF 헤더 필요.
+- `includeBuild('../Doro')` 로 Doro SDK 사용(버전은 `.doro-sdk-ref` 의 태그로 고정, CI·배포가 그 태그로 Doro 를 받는다). 응답 봉투·`GlobalExceptionHandler`·`GuardTuples` 패턴(DB 트랜잭션 안에서 튜플 쓰기, 실패 시 보상)을 따른다.
+- 로그인은 BFF: 브라우저에는 HttpOnly 세션 쿠키만 있다. 로그인·세션·토큰 갱신은 Doro 의 BFF 서비스(doro-bff)가 맡고, 게이트웨이가 세션을 확인해 `Authorization: Bearer` 를 붙여 준다. 이 서비스는 토큰만 검증한다(예전에 이 서비스 안에서 돌던 내장 로그인은 제거했다).
 
 ### 게이트웨이 라우팅 (중요)
 `doro-blog` 는 게이트웨이의 `/api/v1/` 전체를 가져가므로 도로 파티는 같은 경로를 쓸 수 없다. **하위 경로 마운트**를 쓴다.
@@ -132,7 +132,7 @@ type party_map {
 
 | 영역 | 엔드포인트 |
 |---|---|
-| 세션(BFF) | `GET /bff/login`, `GET /bff/callback`, `POST /bff/logout`, `GET /bff/session` |
+| 세션(BFF) | `GET /bff/session`(이 서비스). `GET /bff/login`, `GET /bff/callback`, `POST /bff/logout` 은 같은 경로로 doro-bff 가 제공한다 |
 | 지도 | `POST/GET /maps`, `GET/PATCH/DELETE /maps/{id}`, `PUT/DELETE /maps/{id}/shares/{userId}` |
 | 핀 | `POST/GET /maps/{id}/pins`(GET 은 `status`, `tag` 필터), `PUT·PATCH/DELETE /maps/{id}/pins/{pinId}` — 핀은 항상 지도 경로 아래에서만 접근한다(지도 권한 = 핀 권한, 다른 지도의 핀 ID 로 접근하는 IDOR 방지) |
 | 방문 기록 | `POST/GET /maps/{id}/pins/{pinId}/visits`, `DELETE .../visits/{visitId}` |
@@ -238,7 +238,7 @@ M4까지가 "쓸 만한 서비스"의 기준선이었고, M0~M5 는 모두 구�
 
 ## 9. 환경변수 (예시)
 
-`DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media`, `PARTY_OAUTH_CLIENT_ID=doro-party`, `PARTY_OAUTH_REDIRECT_URI`, `PARTY_SESSION_KEY`(base64 32바이트, 기본값 없음), `PARTY_COOKIE_SECURE`, 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
+`DB_HOST/DB_PORT/DB_NAME=service_party/DB_USER/DB_PASSWORD`, `IAM_HOST/IAM_PORT`, `GUARD_GRPC_HOST/PORT`, `GUARD_HTTP_HOST/PORT`, `DORO_GUARD_SERVICE_TOKEN`, `MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET=doro-party-media`, `PARTY_OAUTH_CLIENT_ID=doro-party`(받아 줄 토큰의 클라이언트), `PARTY_SESSION_KEY`(초대 코드 암호화 키, base64 32바이트, 기본값 없음. `PARTY_INVITE_KEY` 가 있으면 그 값), 프런트 `VITE_KAKAO_MAP_APP_KEY`. 비밀값은 `.env` 로만 관리하고 `.env.example` 에는 자리표시자만 둔다.
 
 포트: party-api `8086`, party-web `3005`(Doro·blog·menu·sebi-wht·로컬의 다른 컨테이너가 쓰는 8080~8085, 8090, 3000~3004 와 겹치지 않음).
 

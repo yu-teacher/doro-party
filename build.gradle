@@ -60,7 +60,7 @@ tasks.named('test') {
     // 테스트는 로컬 docker 의 개발용 Postgres/MinIO 를 쓴다. 운영 설정에는 기본 비밀번호를 두지 않으므로 테스트에서만 주입한다.
     environment 'DB_PASSWORD', System.getenv('DB_PASSWORD') ?: 'doro_secret'
     environment 'MINIO_SECRET_KEY', System.getenv('MINIO_SECRET_KEY') ?: 'doro_secret'
-    // 테스트 전용 세션 암호화 키(운영 키가 아니다)
+    // 테스트 전용 초대 코드 암호화 키(운영 키가 아니다). 운영처럼 PARTY_INVITE_KEY 없이 PARTY_SESSION_KEY 로 받는 경로를 그대로 쓴다.
     environment 'PARTY_SESSION_KEY', System.getenv('PARTY_SESSION_KEY') ?: 'dGVzdC1vbmx5LWtleS0wMTIzNDU2Nzg5MDEyMzQ1Njc='
 }
 

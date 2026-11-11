@@ -29,12 +29,17 @@ jobs:
     timeout-minutes: 40
     steps:
       # build.gradle 의 includeBuild('../Doro') 때문에 Doro 레포가 형제 디렉터리로 필요하다.
+      # Doro 는 .doro-sdk-ref 에 적힌 태그로 받는다(CI 가 시험한 것과 같은 SDK 로 빌드한다).
       - uses: actions/checkout@v4
         with:
           path: doro-party
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Doro SDK 버전 읽기
+        id: sdk
+        run: echo "ref=$(tr -d '[:space:]' < doro-party/.doro-sdk-ref)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: yu-teacher/doro
           path: Doro
+          ref: ${{ steps.sdk.outputs.ref }}
       - run: doro-party/scripts/deploy-on-server.sh "$GITHUB_WORKSPACE/doro-party" "$GITHUB_WORKSPACE/Doro"

@@ -58,13 +58,18 @@ jobs:
     timeout-minutes: 30
     steps:
       # build.gradle 의 includeBuild('../Doro') 와 Guard 이미지 빌드를 위해 Doro 레포를 형제 디렉터리로 받는다.
+      # Doro 는 .doro-sdk-ref 에 적힌 태그로 받는다(Doro main 이 바뀌어도 이 서비스의 빌드가 흔들리지 않게).
       - uses: actions/checkout@v4
         with:
           path: doro-party
+      - name: Doro SDK 버전 읽기
+        id: sdk
+        run: echo "ref=$(tr -d '[:space:]' < doro-party/.doro-sdk-ref)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           repository: yu-teacher/doro
           path: Doro
+          ref: ${{ steps.sdk.outputs.ref }}
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

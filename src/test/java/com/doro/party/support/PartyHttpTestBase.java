@@ -5,67 +5,41 @@ import com.doro.party.infra.guard.GuardTuples;
 import com.doro.party.infra.guard.PartyGuard;
 import com.hunnit_beasts.doro.sdk.security.jwks.JwksKeyProvider;
 import com.jayway.jsonpath.JsonPath;
-import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.test.web.servlet.request.AbstractMockHttpServletRequestBuilder;
-import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * 세션 쿠키로 인증된 HTTP 테스트의 공통 기반. 가짜 IAM 서버와 실제 DB·Guard 를 쓰고,
- * 실제 로그인 흐름(PKCE 인가 요청 → 콜백)을 거쳐 사용자별 세션 쿠키를 만든다.
- * 같은 설정이면 Spring 컨텍스트가 재사용되므로 가짜 IAM 은 JVM 이 끝날 때만 내린다.
+ * 인증된 HTTP 테스트의 공통 기반. 실제 DB·Guard 를 쓰고, 운영처럼 게이트웨이가 붙여 주는 {@code Authorization: Bearer} 로 요청한다.
+ * 토큰은 시험용 키({@link TestTokens})로 서명하고, 그 공개 키를 JWKS 제공자에 등록해 SDK 가 실제 검증을 거치게 한다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 public abstract class PartyHttpTestBase {
 
-    protected static final String SITE = "https://party.test";
-    protected static final String COOKIE = "doro_party_session";
-    protected static final String CSRF = "X-Party-Csrf";
     protected static final String CLIENT_ID = "doro-party";
-    protected static final String LOGIN_COOKIE = "doro_party_login";
 
-    /** 로그인 시작 때 브라우저가 받은 '로그인 진행 중' 쿠키 값(state 별). 콜백 도우미가 같은 브라우저처럼 되돌려 보낸다. */
-    private static final java.util.Map<String, String> LOGIN_COOKIES = new java.util.concurrent.ConcurrentHashMap<>();
-
-    protected static final FakeIam IAM = startIam();
-
-    private static FakeIam startIam() {
-        try {
-            FakeIam iam = new FakeIam();
-            Runtime.getRuntime().addShutdownHook(new Thread(iam::close));
-            return iam;
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-    }
+    protected static final TestTokens TOKENS = new TestTokens();
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
-        registry.add("party.auth.authorize-url", () -> "https://doro.test/oauth2/authorize");
-        registry.add("party.auth.token-url", () -> IAM.baseUrl() + "/oauth2/token");
-        registry.add("party.auth.revoke-url", () -> IAM.baseUrl() + "/oauth2/revoke");
-        registry.add("party.auth.redirect-uri", () -> SITE + "/party/api/v1/bff/callback");
-        registry.add("party.auth.web-base-path", () -> "/party");
-        registry.add("party.auth.cookie-secure", () -> "true");
         registry.add("doro.iam.revocation-check", () -> "OFF");
         // 개발용 버킷과 섞이지 않도록 테스트 전용 버킷을 쓴다
         registry.add("party.storage.bucket", () -> "doro-party-test");
@@ -85,12 +59,8 @@ public abstract class PartyHttpTestBase {
     @Autowired private JwksKeyProvider jwks;
 
     @BeforeEach
-    void resetIam() {
-        jwks.registerKey(FakeIam.KID, IAM.publicKey());
-        IAM.rejectRefresh = false;
-        IAM.unavailable = false;
-        IAM.tooManyRequests = false;
-        IAM.accessTtlSeconds = 900;
+    void registerTestKey() {
+        jwks.registerKey(TestTokens.KID, TOKENS.publicKey());
     }
 
     @Autowired protected GuardTuples guardTuples;
@@ -141,82 +111,29 @@ public abstract class PartyHttpTestBase {
         return send(owner, put("/api/v1/maps/{m}/shares/{u}", mapId, target.id()).contentType(MediaType.APPLICATION_JSON).content("{\"role\":\"" + role + "\"}"));
     }
 
-    /** 로그인한 테스트 사용자. 세션 쿠키로 요청을 인증한다. */
-    public record TestUser(UUID id, String email, String cookie) {
+    /** 로그인한 테스트 사용자. 게이트웨이가 붙여 주는 것과 같은 Bearer 액세스 토큰으로 요청을 인증한다. */
+    public record TestUser(UUID id, String email, String accessToken) {
 
-        /** 이 사용자로 요청을 보낸다. 상태를 바꾸는 메서드에는 CSRF 증명(헤더·Origin)도 붙인다. */
+        /** 이 사용자로 요청을 보낸다. */
         public RequestBuilder sign(AbstractMockHttpServletRequestBuilder<?> request) {
-            request.cookie(new Cookie(COOKIE, cookie));
-            request.header(CSRF, "1");
-            request.header("Origin", SITE);
+            request.header(HttpHeaders.AUTHORIZATION, "Bearer " + accessToken);
             return request;
         }
     }
 
-    /** 새 사용자를 만들고 실제 로그인 흐름으로 세션을 받는다. */
+    /**
+     * 새 사용자를 만든다. 운영의 웹처럼 로그인 직후 먼저 세션 조회를 불러 도로 파티 사용자 행을 만든다
+     * (gateway 모드에서는 이 조회가 사용자 행을 만든다).
+     */
     protected TestUser newUser() throws Exception {
         UUID id = UUID.randomUUID();
         String email = newEmail();
-        return new TestUser(id, email, login(id, email, null));
-    }
-
-    protected record StartedLogin(String state, String challenge, String location) {}
-
-    protected StartedLogin startLogin(String returnPath) throws Exception {
-        var request = get("/api/v1/bff/login");
-        if (returnPath != null) {
-            request.param("return", returnPath);
-        }
-        MockHttpServletResponse response = mockMvc.perform(request).andExpect(status().isFound()).andReturn().getResponse();
-        String location = response.getHeader("Location");
-        var params = UriComponentsBuilder.fromUriString(location).build().getQueryParams();
-        String state = params.getFirst("state");
-        for (String header : response.getHeaders("Set-Cookie")) {
-            if (header.startsWith(LOGIN_COOKIE + "=")) {
-                LOGIN_COOKIES.put(state, header.substring((LOGIN_COOKIE + "=").length(), header.indexOf(';')));
-            }
-        }
-        return new StartedLogin(state, params.getFirst("code_challenge"), location);
-    }
-
-    protected MockHttpServletResponse callback(String code, String state) throws Exception {
-        var request = get("/api/v1/bff/callback").param("code", code).param("state", state);
-        String loginCookie = state == null ? null : LOGIN_COOKIES.get(state);
-        if (loginCookie != null) {
-            request.cookie(new Cookie(LOGIN_COOKIE, loginCookie));
-        }
-        return mockMvc.perform(request).andReturn().getResponse();
-    }
-
-    protected String loginCookieOf(String state) {
-        return LOGIN_COOKIES.get(state);
-    }
-
-    protected String cookieValueOf(MockHttpServletResponse response) {
-        String header = response.getHeader("Set-Cookie");
-        for (String h : response.getHeaders("Set-Cookie")) {
-            if (h.startsWith(COOKIE + "=")) {
-                return h.substring((COOKIE + "=").length(), h.indexOf(';'));
-            }
-        }
-        assertThat(header).as("세션 쿠키가 발급되어야 한다").isNotNull().startsWith(COOKIE + "=");
-        return null;
-    }
-
-    /** 로그인 전체를 수행하고 세션 쿠키 값을 돌려준다. */
-    protected String login(UUID userId, String email, String returnPath) throws Exception {
-        StartedLogin started = startLogin(returnPath);
-        String code = IAM.issueCode(userId, email, started.challenge(), CLIENT_ID);
-        MockHttpServletResponse response = callback(code, started.state());
-        assertThat(response.getStatus()).isEqualTo(302);
-        return cookieValueOf(response);
+        TestUser user = new TestUser(id, email, TOKENS.accessToken(id, email, CLIENT_ID));
+        send(user, get("/api/v1/bff/session")).andExpect(status().isOk()).andExpect(jsonPath("$.data.authenticated").value(true));
+        return user;
     }
 
     protected String newEmail() {
         return "party-" + UUID.randomUUID().toString().substring(0, 8) + "@doro.local";
-    }
-
-    protected Cookie session(String value) {
-        return new Cookie(COOKIE, value);
     }
 }

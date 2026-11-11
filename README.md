@@ -47,7 +47,7 @@
   }
   ```
 - **DB가 원본, Guard는 그에 맞춘 사본**: 공유·멤버십 상태는 DB에 두고 Guard 튜플은 같은 트랜잭션에서 쓰고(실패하면 함께 롤백) 지울 때는 커밋 뒤에 지웁니다. 지울 튜플은 같은 트랜잭션에서 아웃박스 테이블에도 기록해, 그 순간 Guard 가 잠깐 응답하지 못해도 성공할 때까지 다시 지웁니다(권한 회수가 유실되지 않습니다).
-- **BFF 로그인**: 서버가 OAuth 토큰(PKCE)을 들고 브라우저에는 HttpOnly 세션 쿠키만 줍니다. CSRF 헤더 검증, 토큰은 암호화해 저장합니다.
+- **BFF 로그인**: 로그인·세션은 플랫폼의 BFF 서비스(doro-bff)가 맡습니다. 브라우저에는 HttpOnly 세션 쿠키만 있고, 게이트웨이가 세션을 확인해 `Authorization: Bearer` 를 붙여 주면 이 서비스는 토큰(서명·만료·발급 클라이언트)만 검증합니다.
 - **설명 가능한 추천**: 점수 계산은 DB·권한과 무관한 순수 함수이고, 응답에 항목별 점수 내역을 담습니다.
   `점수 = 사람 수×10 + 가고 싶음×4 + 다녀옴×2 + "또 가고 싶음"×6 + "한 번이면 충분"×(−4) + Σ(별점−3)×2` (가중치는 환경변수로 조정)
 - **사진은 비공개 버킷**(MinIO)에 두고, 권한을 확인한 백엔드만 내려줍니다. 형식은 파일의 첫 바이트로 판별합니다(JPEG·PNG·WebP).
@@ -61,12 +61,16 @@ flowchart LR
   end
   GW["게이트웨이 (nginx)"]
   API["Spring Boot API"]
+  BFF["Doro BFF<br/>로그인 · 세션"]
   IAM["Doro IAM<br/>OAuth · JWKS"]
   Guard["Doro Guard<br/>ReBAC 권한 판정"]
   DB[("PostgreSQL")]
   S3[("MinIO<br/>비공개 버킷")]
-  UI -->|"HttpOnly 세션 쿠키"| GW --> API
-  API -->|"OAuth (PKCE)"| IAM
+  UI -->|"HttpOnly 세션 쿠키"| GW
+  GW -->|"세션 확인"| BFF
+  GW -->|"Bearer 토큰"| API
+  BFF -->|"OAuth (PKCE)"| IAM
+  API -->|"JWKS: 토큰 검증"| IAM
   API -->|"gRPC: 권한 확인·튜플"| Guard
   API --> DB
   API --> S3
@@ -86,13 +90,15 @@ flowchart LR
 ## 구성
 | 위치 | 내용 |
 |---|---|
-| `src/` | Spring Boot 백엔드 (Doro OAuth BFF 로그인, Guard ReBAC, Flyway) |
+| `src/` | Spring Boot 백엔드 (Doro 토큰 검증, Guard ReBAC, Flyway) |
 | `web/` | React + Vite PWA (카카오맵), `/party/` 하위 경로에 마운트 |
 | `deploy/` | 게이트웨이(nginx) 설정 조각 |
 | `scripts/` | CI 테스트, 서버 준비·게이트웨이 반영·배포 스크립트 |
 | `docs/` | [설계](docs/DESIGN.md) · [배포](docs/DEPLOY.md) |
 
 ## 개발
+Doro SDK 는 형제 디렉터리의 Doro 저장소에서 빌드합니다(`settings.gradle` 의 `includeBuild('../Doro')`). 쓰는 SDK 버전은 [`.doro-sdk-ref`](.doro-sdk-ref) 의 태그로 고정하며, CI·배포도 이 태그로 Doro 를 받습니다. 로컬에서도 `../Doro` 를 그 태그로 맞춥니다(예: `git -C ../Doro checkout "$(cat .doro-sdk-ref)"`). SDK 를 올릴 때는 이 파일을 바꾸는 PR 로 올립니다.
+
 ```bash
 cp .env.example .env            # 값 채우기
 ./gradlew test                  # 백엔드 테스트 (로컬 Doro 스택 필요: Postgres, Guard)
@@ -103,9 +109,5 @@ scripts/ci-test.sh              # CI 와 같은 검증(격리된 Postgres/Guard/
 `VITE_KAKAO_MAP_APP_KEY` 가 없으면 지도 대신 안내가 표시됩니다(`web/.env.local` 에 둡니다. 커밋되지 않습니다).
 
 ### 로컬에서 로그인까지 써보기
-운영에서는 게이트웨이가 `/oauth2/consent` 를 포털로 연결하지만 로컬에는 게이트웨이가 없습니다.
-로컬 Doro 의 포털 개발 컨테이너(3010)가 IAM 프록시와 로그인 화면을 함께 서빙하므로, 인가 주소만 그쪽으로 돌립니다.
-```bash
-PARTY_OAUTH_AUTHORIZE_URL=http://localhost:3010/oauth2/authorize PARTY_COOKIE_SECURE=false ./gradlew bootRun
-```
-로컬 IAM 에 OAuth 클라이언트 `doro-party`(redirect URI `http://localhost:3005/party/api/v1/bff/callback`, 자사 앱)를 등록해 두어야 합니다.
+로그인은 이 서비스가 아니라 Doro 의 BFF 서비스(doro-bff)와 게이트웨이가 처리합니다. 로컬에서 로그인 화면까지 쓰려면 Doro 쪽에서 doro-bff 와 게이트웨이를 함께 띄웁니다(Doro 저장소 문서 참고).
+이 서비스만 띄웠을 때는 API 를 `Authorization: Bearer <Doro 액세스 토큰>` 으로 직접 부를 수 있습니다(토큰의 클라이언트(`cid`)가 `doro-party` 여야 합니다).

@@ -15,10 +15,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 현재 로그인 상태와 내 프로필. 로그인·콜백·로그아웃은 SDK 의 BFF 컨트롤러가 같은 경로(/api/v1/bff)에서 제공하고,
- * 프로필 모양이 서비스마다 다르므로 이 조회만 도로 파티가 맡는다.
+ * 현재 로그인 상태와 내 프로필. 로그인·콜백·로그아웃은 별도 BFF(doro-bff)가 같은 경로(/api/v1/bff)에서 제공하고
+ * (게이트웨이가 그쪽으로 보낸다), 프로필 모양이 서비스마다 다르므로 이 조회만 도로 파티가 맡는다.
+ * 게이트웨이가 세션 쿠키를 확인해 {@code Authorization: Bearer} 를 붙여 주고, 이 서비스는 그 토큰만 검증한다.
  */
-@Tag(name = "Auth (BFF)", description = "Doro OAuth 로그인 — 세션 쿠키 기반")
+@Tag(name = "Auth (BFF)", description = "로그인 상태 조회 — 게이트웨이가 붙여 주는 Bearer 기반")
 @RestController
 @RequestMapping("/api/v1/bff")
 @RequiredArgsConstructor
@@ -38,10 +39,7 @@ public class BffSessionController {
         return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "no-store").body(ApiResponse.success(body));
     }
 
-    /**
-     * 사용자 행이 없으면 만든다. embedded 모드에서는 로그인 직후 훅이 이미 만들었고, gateway 모드(로그인을 별도 BFF 가 처리)에서는
-     * 로그인 후 첫 화면이 이 조회라서 여기서 만든다(이미 있으면 읽기만 한다).
-     */
+    /** 사용자 행이 없으면 만든다. 로그인 후 첫 화면이 이 조회라서 여기서 만든다(이미 있으면 읽기만 한다). */
     private UserProfileResponse profileOf(DoroUser doroUser) {
         userService.getOrCreateUser(doroUser);
         return userService.getProfileById(doroUser.userId());
