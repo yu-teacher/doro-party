@@ -13,8 +13,8 @@ scp docker-compose.prod.yml <서버>:doro-party/
 
 1. **DB**: Postgres 에 `service_party` 생성(`POSTGRES_MULTIPLE_DATABASES` 는 빈 볼륨 최초 기동 때만 처리된다).
 2. **MinIO 버킷**: `doro-party-media`. 앱이 첫 사용 때 **비공개**로 만든다. 사진은 백엔드를 거쳐서만 내려가므로 게이트웨이에 공개 경로가 없다.
-3. **OAuth 클라이언트**: `doro-party`, redirect URI `https://<공개 도메인>/party/api/v1/bff/callback`, 자사 클라이언트(동의 화면 생략).
-4. **서버 `.env`**: DB·MinIO 접속 정보, `PARTY_SESSION_KEY`(새 난수, 비밀번호 관리자에 보관. 바꾸면 모든 세션이 무효), `PARTY_OAUTH_*`, 카카오 지도 키(웹 빌드 때 번들에 들어간다).
+3. **OAuth 클라이언트**: `doro-party`, redirect URI `https://<공개 도메인>/party/api/v1/bff/callback`, 자사 클라이언트(동의 화면 생략). 로그인은 Doro 의 BFF 서비스(doro-bff)가 이 클라이언트로 하고, 게이트웨이가 `/party/api/v1/bff/{login,callback,logout}` 을 그쪽으로 보낸다.
+4. **서버 `.env`**: DB·MinIO 접속 정보, `PARTY_SESSION_KEY`(초대 코드 암호화 키. 새 난수, 비밀번호 관리자에 보관. 지우거나 바꾸면 저장된 초대 링크를 복호화하지 못한다. 별도 키를 쓰려면 `PARTY_INVITE_KEY`), 카카오 지도 키(웹 빌드 때 번들에 들어간다).
 5. **Guard 서비스 토큰**: 서비스별 토큰(`schema-write` 포함)을 Guard 설정에 추가하고 Guard 를 다시 만든다. 공유 토큰을 쓰지 않는다.
 
 ### 푸시 알림 키 (선택, 한 번만)
@@ -49,7 +49,7 @@ ssh <서버> 'bash -s -- --apply --refresh'            < scripts/apply-gateway-p
 
 ## 4. 점검
 - `https://<도메인>/party/` 가 열리고 manifest·service worker 가 등록된다.
-- `/party/api/v1/bff/login` 이 Doro 로그인 화면으로 이동하고, 로그인 후 `/party/` 로 돌아온다.
+- `/party/api/v1/bff/login` 이 Doro 로그인 화면으로 이동하고, 로그인 후 `/party/` 로 돌아온다(로그인 경로는 doro-bff 가 처리한다).
 - `/party/api/v1/bff/session` 응답이 로그인 상태를 반영한다.
 - 기존 서비스(블로그 `/`, 포털, 메뉴)가 그대로 동작한다.
 
@@ -69,4 +69,4 @@ CI 가 통과한 커밋만 `deploy.yml` 이 서버 러너에서 `scripts/deploy-
 3. 이 저장소에 러너를 등록하고(저장소 설정 → Actions → Runners) 저장소 변수 `CD_ENABLED=true` 를 만든다. 이 변수가 없으면 배포 작업은 건너뛴다.
 4. 사전 점검: `scripts/deploy-on-server.sh --dry-run <party 체크아웃> <Doro 체크아웃>`
 
-로컬에서 CI 와 같은 검증: `scripts/ci-test.sh` (Docker, Java 25, Node 24, 형제 디렉터리 `../Doro` 필요).
+로컬에서 CI 와 같은 검증: `scripts/ci-test.sh` (Docker, Java 25, Node 24, 형제 디렉터리 `../Doro` 필요. `.doro-sdk-ref` 의 태그로 체크아웃해 둔다).

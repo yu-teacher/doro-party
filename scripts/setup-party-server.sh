@@ -7,9 +7,9 @@
 #
 # 하는 일
 #   1) Postgres 에 service_party DB 를 만든다(없을 때만).
-#   2) ~/doro-party/.env 를 만든다: DB·MinIO 접속 정보는 블로그 .env 에서 복사하고, 세션 암호화 키와 Guard 서비스 토큰은 새로 만든다.
+#   2) ~/doro-party/.env 를 만든다: DB·MinIO 접속 정보는 블로그 .env 에서 복사하고, 초대 코드 암호화 키(PARTY_SESSION_KEY)와 Guard 서비스 토큰은 새로 만든다.
 #   3) ~/doro/.env 의 DORO_GUARD_SERVICE_TOKENS 에 party 토큰(schema-write)을 추가하고 Guard 를 다시 만든다(몇 초간 권한 검사 중단).
-#   4) Doro IAM(doro_auth)에 OAuth 클라이언트 doro-party 를 등록한다(redirect_uri 정확히 하나).
+#   4) Doro IAM(doro_auth)에 OAuth 클라이언트 doro-party 를 등록한다(redirect_uri 정확히 하나. 로그인은 별도 BFF(doro-bff)가 이 클라이언트로 한다).
 # 하지 않는 일: 게이트웨이 nginx 설정 반영, 러너 등록, docker-compose.prod.yml 복사(안내만 한다).
 set -Eeuo pipefail
 
@@ -76,12 +76,11 @@ if [ "$need_env" = true ]; then
     echo "DB_PASSWORD=$(env_get "$BLOG_ENV" DB_PASSWORD)"
     echo "MINIO_ROOT_PASSWORD=$(env_get "$BLOG_ENV" MINIO_ROOT_PASSWORD)"
     echo "DORO_GUARD_SERVICE_TOKEN=$GUARD_TOKEN"
+    # 초대 코드 암호화 키(이름은 예전 로그인 세션 키 그대로). 저장된 초대 코드가 이 키로 암호화되므로 한 번 정하면 바꾸지 않는다.
     echo "PARTY_SESSION_KEY=$(openssl rand -base64 32)"
-    echo "PARTY_OAUTH_AUTHORIZE_URL=$ORIGIN/oauth2/authorize"
-    echo "PARTY_OAUTH_REDIRECT_URI=$ORIGIN/party/api/v1/bff/callback"
     echo "VITE_KAKAO_MAP_APP_KEY=${VITE_KAKAO_MAP_APP_KEY:-}"
   } > "$ENV_FILE"
-  log "$ENV_FILE 생성 (값은 출력하지 않는다. PARTY_SESSION_KEY 를 잃으면 모든 로그인 세션이 무효가 된다)"
+  log "$ENV_FILE 생성 (값은 출력하지 않는다. PARTY_SESSION_KEY 를 잃으면 저장된 초대 링크를 다시 보여 주지 못한다)"
 elif [ -n "${VITE_KAKAO_MAP_APP_KEY:-}" ] && [ -z "$(env_get "$ENV_FILE" VITE_KAKAO_MAP_APP_KEY)" ]; then
   sed -i '/^VITE_KAKAO_MAP_APP_KEY=/d' "$ENV_FILE"
   printf 'VITE_KAKAO_MAP_APP_KEY=%s\n' "$VITE_KAKAO_MAP_APP_KEY" >> "$ENV_FILE"

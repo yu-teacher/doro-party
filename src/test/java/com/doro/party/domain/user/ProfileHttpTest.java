@@ -45,7 +45,7 @@ class ProfileHttpTest extends PartyHttpTestBase {
                 .andExpect(jsonPath("$.data.nickname").value("파티왕")).andExpect(jsonPath("$.data.username").value(name));
 
         send(user, get("/api/v1/me")).andExpect(jsonPath("$.data.nickname").value("파티왕")).andExpect(jsonPath("$.data.username").value(name));
-        mockMvc.perform(get("/api/v1/bff/session").cookie(session(user.cookie())))
+        send(user, get("/api/v1/bff/session"))
                 .andExpect(jsonPath("$.data.user.nickname").value("파티왕")).andExpect(jsonPath("$.data.user.username").value(name));
         // 자기 이름을 그대로 다시 저장해도 오류가 아니다
         update(user, "파티왕2", name).andExpect(status().isOk());

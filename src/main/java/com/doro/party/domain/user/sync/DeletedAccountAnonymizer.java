@@ -3,7 +3,6 @@ package com.doro.party.domain.user.sync;
 import com.doro.party.domain.friend.FriendInviteRepository;
 import com.doro.party.domain.friend.Friendship;
 import com.doro.party.domain.friend.FriendshipRepository;
-import com.doro.party.domain.auth.repository.AuthSessionRepository;
 import com.doro.party.domain.group.GroupMember;
 import com.doro.party.domain.group.GroupMemberRepository;
 import com.doro.party.domain.group.GroupRole;
@@ -28,6 +27,7 @@ import com.doro.party.infra.guard.PartyGuard;
 import com.doro.party.infra.storage.ObjectStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,7 +55,7 @@ public class DeletedAccountAnonymizer {
     static final String PLACEHOLDER_NICKNAME = "탈퇴한 사용자";
 
     private final PartyUserRepository users;
-    private final AuthSessionRepository authSessions;
+    private final JdbcTemplate jdbc;
     private final FriendshipRepository friendships;
     private final FriendInviteRepository friendInvites;
     private final PartyGroupRepository groups;
@@ -90,8 +90,9 @@ public class DeletedAccountAnonymizer {
         List<Tuple> grant = new ArrayList<>();
         Set<String> photoKeys = new LinkedHashSet<>(photos.objectKeysUploadedBy(userId));
 
-        // 로그인 세션(embedded 모드의 암호화된 토큰). gateway 모드에서는 이 서비스에 세션이 없어 0건이다.
-        authSessions.deleteAllByUserId(userId);
+        // 예전 내장 로그인(embedded 모드) 시절에 남은 세션 행(암호화된 토큰). 지금은 로그인을 별도 BFF 가 맡아 새로 쌓이지 않는다.
+        // 테이블은 아직 지우지 않았으므로(되돌릴 수 없는 마이그레이션은 따로 결정한다) 남은 행만 지운다. 테이블을 지울 때 이 줄도 지운다.
+        jdbc.update("delete from auth_sessions where user_id = ?", userId);
 
         // 본인에게만 보이던 것: 사적 메모, 댓글 읽음 표시, 친구 초대 링크, 푸시 구독
         privateNotes.deleteAllByUserId(userId);

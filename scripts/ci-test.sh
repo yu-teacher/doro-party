@@ -7,6 +7,7 @@
 #   scripts/ci-test.sh web        # 프런트만 (스택 불필요)
 #
 # 필요: Docker, Java 25, Node 24, 형제 디렉터리 ../Doro (DORO_DIR 로 변경). 포트는 CI_* 환경변수로 바꿀 수 있다.
+# ../Doro 는 .doro-sdk-ref 의 태그로 체크아웃해 둔다(CI 도 그 태그로 받는다).
 set -Eeuo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

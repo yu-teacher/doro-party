@@ -1,6 +1,6 @@
 package com.doro.party.domain.group;
 
-import com.hunnit_beasts.doro.sdk.bff.BffCrypto;
+import com.doro.party.common.crypto.InviteCodeCrypto;
 import com.doro.party.common.exception.ErrorCode;
 import com.doro.party.common.exception.PartyException;
 import com.doro.party.common.util.Digests;
@@ -42,7 +42,7 @@ public class GroupInviteService {
     private final GroupService groupService;
     private final PartyUserRepository users;
     private final PartyUserService userService;
-    private final BffCrypto crypto;
+    private final InviteCodeCrypto crypto;
     private final PartyLimits limits;
     private final Clock clock;
     private final SecureRandom random = new SecureRandom();

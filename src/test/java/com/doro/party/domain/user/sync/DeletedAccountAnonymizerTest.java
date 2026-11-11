@@ -65,6 +65,11 @@ class DeletedAccountAnonymizerTest extends DeletedAccountTestSupport {
         String soloPin = pin(victim, solo, "혼자 핀");
         String soloPhotoKey = objectKeyOf(upload(victim, solo, soloPin));
 
+        // 예전 내장 로그인 시절에 남은 세션 행(지금은 새로 쌓이지 않는다)
+        jdbc.update("insert into auth_sessions (id, session_hash, user_id, access_token_enc, access_expires_at, refresh_token_enc, expires_at)"
+                + " values (?, ?, ?, 'v1:x', now(), 'v1:x', now() + interval '1 day')",
+                java.util.UUID.randomUUID(), java.util.UUID.randomUUID().toString().replace("-", ""), victim.id());
+
         assertThat(anonymizer.anonymize(victim.id(), Instant.now())).isTrue();
 
         // 프로필 익명화
