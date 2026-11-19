@@ -1,4 +1,4 @@
-FROM nginx:1.27-alpine
+FROM nginx:1.31.9-alpine
 
 # Vite base(/party/)와 같은 경로 아래에 파일을 둔다. 게이트웨이가 /party/ 를 그대로 전달한다.
 COPY dist /usr/share/nginx/html/party
